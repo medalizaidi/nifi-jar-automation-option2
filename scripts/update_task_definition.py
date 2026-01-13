@@ -7,7 +7,7 @@ Creates a PR with the updated task definition.
 import os
 import re
 from datetime import datetime
-from github import Github
+from github import Github, Auth
 
 
 def update_task_definition_content(task_def_path: str, image_tag: str, aws_account_id: str, aws_region: str) -> str:
@@ -68,12 +68,39 @@ def create_github_pr(
     github_token = os.environ.get('GITHUB_TOKEN')
     repo_name = os.environ.get('CIRCLE_PROJECT_REPONAME')
     repo_owner = os.environ.get('CIRCLE_PROJECT_USERNAME')
-    
+
+    # Debug: print environment variables
+    print(f"DEBUG: GITHUB_TOKEN present: {bool(github_token)}")
+    print(f"DEBUG: CIRCLE_PROJECT_REPONAME: {repo_name}")
+    print(f"DEBUG: CIRCLE_PROJECT_USERNAME: {repo_owner}")
+
     if not all([github_token, repo_name, repo_owner]):
-        raise ValueError("Missing required environment variables")
-    
-    g = Github(github_token)
-    repo = g.get_repo(f"{repo_owner}/{repo_name}")
+        missing = []
+        if not github_token: missing.append('GITHUB_TOKEN')
+        if not repo_name: missing.append('CIRCLE_PROJECT_REPONAME')
+        if not repo_owner: missing.append('CIRCLE_PROJECT_USERNAME')
+        raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
+
+    # Use new Auth.Token() method to avoid deprecation warning
+    auth = Auth.Token(github_token)
+    g = Github(auth=auth)
+
+    # Try to get the repo with better error handling
+    repo_full_name = f"{repo_owner}/{repo_name}"
+    print(f"Attempting to access repository: {repo_full_name}")
+
+    try:
+        repo = g.get_repo(repo_full_name)
+        print(f"Successfully accessed repository: {repo_full_name}")
+    except Exception as e:
+        print(f"ERROR: Failed to access repository '{repo_full_name}'")
+        print(f"ERROR: {str(e)}")
+        print("\nPossible causes:")
+        print("1. Repository name is incorrect")
+        print("2. GitHub token doesn't have access to this repository")
+        print("3. GitHub token needs 'repo' scope")
+        print(f"\nVerify the repository exists: https://github.com/{repo_full_name}")
+        raise
     
     # Create branch name
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
