@@ -29,7 +29,7 @@ jobs:
           environment:
             DOCKERFILE_PATH: workload/mfx-aggre-data-platform/custom_nifi/Dockerfile
             JARS_FOLDER: workload/mfx-aggre-data-platform/custom_nifi/jars
-            TARGET_BRANCH: master
+            TARGET_BRANCH: main
       - store_artifacts:
           path: /tmp/jar-diff-report.json
           destination: jar-diff-report
@@ -86,7 +86,7 @@ jobs:
           command: python scripts/update_task_definition.py
           environment:
             TASK_DEF_PATH: workload/mfx-aggre-data-platform/ecs_task_definition.tf
-            TARGET_BRANCH: master
+            TARGET_BRANCH: main
 
 workflows:
   jar-to-deployment:
@@ -95,7 +95,7 @@ workflows:
       - scan-jars-and-create-dockerfile-pr:
           filters:
             branches:
-              only: master
+              only: main
           context:
             - github-context
 
@@ -103,7 +103,7 @@ workflows:
       - build-and-push-image:
           filters:
             branches:
-              only: master
+              only: main
           context:
             - aws-context
 
