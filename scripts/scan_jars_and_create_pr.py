@@ -171,7 +171,7 @@ def create_github_pr(
     """
     Create a GitHub PR with the Dockerfile changes.
     """
-    github_token = os.environ.get('GITHUB_TOKEN')
+    github_token = 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
     repo_name = os.environ.get('CIRCLE_PROJECT_REPONAME')
     repo_owner = os.environ.get('CIRCLE_PROJECT_USERNAME')
 
