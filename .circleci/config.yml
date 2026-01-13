@@ -21,14 +21,6 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Check if JAR manifests changed
-          command: |
-            chmod +x scripts/check_changed_files.sh
-            if ! ./scripts/check_changed_files.sh jars; then
-              echo "No JAR changes detected, skipping this job"
-              circleci-agent step halt
-            fi
-      - run:
           name: Install dependencies
           command: pip install PyGithub requests
       - run:
@@ -47,14 +39,6 @@ jobs:
     executor: docker-executor
     steps:
       - checkout
-      - run:
-          name: Check if Dockerfile changed
-          command: |
-            chmod +x scripts/check_changed_files.sh
-            if ! ./scripts/check_changed_files.sh dockerfile; then
-              echo "No Dockerfile changes detected, skipping this job"
-              circleci-agent step halt
-            fi
       - setup_remote_docker:
           version: 20.10.24
           docker_layer_caching: true
