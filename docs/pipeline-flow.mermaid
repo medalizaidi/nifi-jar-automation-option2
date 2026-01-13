@@ -1,0 +1,55 @@
+flowchart TB
+    subgraph DEV["👨‍💻 Developer Actions"]
+        A[Developer adds JAR manifest<br/>to jars/ folder] --> B[Creates PR]
+        B --> C{PR Review}
+        C -->|Approved| D[Merge to master]
+        C -->|Rejected| A
+    end
+
+    subgraph SCAN["🔍 JAR Scan Workflow"]
+        D --> E[CircleCI detects<br/>jars/ folder change]
+        E --> F[scan_jars_and_create_pr.py]
+        F --> G[Parse existing JARs<br/>from Dockerfile]
+        G --> H[Compare with<br/>JAR manifests]
+        H --> I{New JARs<br/>found?}
+        I -->|Yes| J[Generate Dockerfile<br/>curl commands]
+        I -->|No| K[Exit - No changes]
+        J --> L[Create PR to update<br/>Dockerfile]
+    end
+
+    subgraph REVIEW1["📋 Dockerfile PR Review"]
+        L --> M{Dockerfile PR<br/>Review}
+        M -->|Approved| N[Merge Dockerfile PR]
+        M -->|Rejected| O[Developer fixes<br/>manifest]
+        O --> A
+    end
+
+    subgraph BUILD["🐳 Docker Build Workflow"]
+        N --> P[CircleCI detects<br/>Dockerfile change]
+        P --> Q[Build Docker image]
+        Q --> R[Push to ECR<br/>with commit SHA tag]
+        R --> S[Push latest tag]
+        S --> T[Create PR to update<br/>ecs_task_definition.tf]
+    end
+
+    subgraph REVIEW2["📋 Task Definition PR Review"]
+        T --> U{Task Def PR<br/>Review}
+        U -->|Approved| V[Merge Task Def PR]
+        U -->|Rejected| W[Manual intervention<br/>required]
+    end
+
+    subgraph DEPLOY["🚀 Deploy Workflow"]
+        V --> X[CircleCI detects<br/>task def change]
+        X --> Y{Manual Approval<br/>Required}
+        Y -->|Approved| Z[Run Terraform apply]
+        Y -->|Rejected| AA[Deployment cancelled]
+        Z --> AB[ECS Service Updated]
+        AB --> AC[✅ New NiFi running<br/>with new JARs]
+    end
+
+    style DEV fill:#e1f5fe
+    style SCAN fill:#fff3e0
+    style REVIEW1 fill:#f3e5f5
+    style BUILD fill:#e8f5e9
+    style REVIEW2 fill:#f3e5f5
+    style DEPLOY fill:#fce4ec

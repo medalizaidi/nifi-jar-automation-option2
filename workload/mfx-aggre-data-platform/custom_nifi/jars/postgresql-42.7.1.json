@@ -1,0 +1,9 @@
+{
+    "name": "postgresql-42.7.1.jar",
+    "url": "https://jdbc.postgresql.org/download/postgresql-42.7.1.jar",
+    "install_path": "/opt/nifi/nifi-current/lib/",
+    "description": "PostgreSQL JDBC Driver",
+    "requested_by": "developer-name",
+    "reason": "Required for PostgreSQL database connections in NiFi flows",
+    "version": "42.7.1"
+}
