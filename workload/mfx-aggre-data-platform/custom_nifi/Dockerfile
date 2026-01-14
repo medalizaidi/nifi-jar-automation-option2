@@ -39,6 +39,18 @@ RUN curl -L "https://repo1.maven.org/maven2/org/mongodb/mongodb-driver-sync/5.2.
         -o /opt/nifi/nifi-current/lib/mongodb-driver-sync-5.2.1.jar && \
         chown 1000:1000 /opt/nifi/nifi-current/lib/mongodb-driver-sync-5.2.1.jar
 
+
+# Download MariaDB JDBC Driver
+RUN curl -L "https://repo1.maven.org/maven2/org/mariadb/jdbc/mariadb-java-client/3.3.3/mariadb-java-client-3.3.3.jar" \
+        -o /opt/nifi/nifi-current/lib/mariadb-java-client-3.3.3.jar && \
+        chown 1000:1000 /opt/nifi/nifi-current/lib/mariadb-java-client-3.3.3.jar
+
+
+# Download Oracle JDBC Driver 23c
+RUN curl -L "https://repo1.maven.org/maven2/com/oracle/database/jdbc/ojdbc11/23.3.0.23.09/ojdbc11-23.3.0.23.09.jar" \
+        -o /opt/nifi/nifi-current/lib/ojdbc11-23.3.0.23.09.jar && \
+        chown 1000:1000 /opt/nifi/nifi-current/lib/ojdbc11-23.3.0.23.09.jar
+
 # ============================================================
 # NEW JARS WILL BE ADDED AUTOMATICALLY ABOVE THIS LINE
 # DO NOT REMOVE THIS COMMENT - IT'S USED BY THE CI PIPELINE
