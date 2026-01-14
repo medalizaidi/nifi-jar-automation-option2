@@ -1,0 +1,115 @@
+version: 2.1
+
+orbs:
+  aws-cli: circleci/aws-cli@4.1
+
+parameters:
+  jar-manifest-changed:
+    type: boolean
+    default: false
+  dockerfile-changed:
+    type: boolean
+    default: false
+
+executors:
+  python-executor:
+    docker:
+      - image: cimg/python:3.11
+    resource_class: medium
+
+  docker-executor:
+    docker:
+      - image: cimg/base:current
+    resource_class: medium
+
+jobs:
+  scan-jars-and-create-dockerfile-pr:
+    executor: python-executor
+    steps:
+      - checkout
+      - run:
+          name: Install dependencies
+          command: pip install PyGithub requests
+      - run:
+          name: Scan JARs and create Dockerfile PR
+          command: python scripts/scan_jars_and_create_pr.py
+          environment:
+            DOCKERFILE_PATH: workload/mfx-aggre-data-platform/custom_nifi/Dockerfile
+            JARS_FOLDER: workload/mfx-aggre-data-platform/custom_nifi/jars
+            TARGET_BRANCH: main
+            CIRCLE_PROJECT_USERNAME: medalizaidi
+            CIRCLE_PROJECT_REPONAME: nifi-jar-automation-option2
+      - store_artifacts:
+          path: /tmp/jar-diff-report.json
+          destination: jar-diff-report
+
+  build-and-push-image:
+    executor: docker-executor
+    steps:
+      - checkout
+      - setup_remote_docker:
+          version: 20.10.24
+          docker_layer_caching: true
+      - aws-cli/setup:
+          region: ${AWS_REGION}
+      - run:
+          name: Build and Push to ECR
+          command: |
+            aws ecr get-login-password --region ${AWS_REGION} | \
+              docker login --username AWS --password-stdin \
+              ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+
+            cd workload/mfx-aggre-data-platform/custom_nifi
+            IMAGE_TAG="${CIRCLE_SHA1:0:7}"
+            ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/apache-nifi-with-custom-jars-repo"
+
+            docker build -t ${ECR_REPO}:${IMAGE_TAG} .
+            docker tag ${ECR_REPO}:${IMAGE_TAG} ${ECR_REPO}:latest
+
+            docker push ${ECR_REPO}:${IMAGE_TAG}
+            docker push ${ECR_REPO}:latest
+
+            echo "${IMAGE_TAG}" > /tmp/image-tag.txt
+      - persist_to_workspace:
+          root: /tmp
+          paths:
+            - image-tag.txt
+
+  create-task-definition-pr:
+    executor: python-executor
+    steps:
+      - checkout
+      - attach_workspace:
+          at: /tmp
+      - run:
+          name: Install dependencies
+          command: pip install PyGithub
+      - run:
+          name: Create PR to update task definition
+          command: python scripts/update_task_definition.py
+          environment:
+            TASK_DEF_PATH: workload/mfx-aggre-data-platform/ecs_task_definition.tf
+            TARGET_BRANCH: main
+            CIRCLE_PROJECT_USERNAME: medalizaidi
+            CIRCLE_PROJECT_REPONAME: nifi-jar-automation-option2
+
+workflows:
+  jar-manifest-workflow:
+    when: << pipeline.parameters.jar-manifest-changed >>
+    jobs:
+      - scan-jars-and-create-dockerfile-pr:
+          context:
+            - github-context
+
+  dockerfile-workflow:
+    when: << pipeline.parameters.dockerfile-changed >>
+    jobs:
+      - build-and-push-image:
+          context:
+            - aws-context
+      - create-task-definition-pr:
+          requires:
+            - build-and-push-image
+          context:
+            - github-context
+            - aws-context
