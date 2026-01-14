@@ -1,24 +1,135 @@
 version: 2.1
 
-setup: true
-
 orbs:
-  path-filtering: circleci/path-filtering@1.1.0
+  aws-cli: circleci/aws-cli@4.1
 
 executors:
-  path-filter-executor:
+  python-executor:
     docker:
-      - image: cimg/base:2024.09
-    resource_class: small
+      - image: cimg/python:3.11
+    resource_class: medium
 
+  docker-executor:
+    docker:
+      - image: cimg/base:current
+    resource_class: medium
+
+jobs:
+  ###########################################################
+  # 1️⃣ Scan JAR manifest → create Dockerfile PR (if needed)
+  ###########################################################
+  scan-jars-and-create-dockerfile-pr:
+    executor: python-executor
+    steps:
+      - checkout
+
+      - run:
+          name: Install dependencies
+          command: pip install PyGithub requests
+
+      - run:
+          name: Scan JARs and create Dockerfile PR
+          command: python scripts/scan_jars_and_create_pr.py
+          environment:
+            DOCKERFILE_PATH: workload/mfx-aggre-data-platform/custom_nifi/Dockerfile
+            JARS_FOLDER: workload/mfx-aggre-data-platform/custom_nifi/jars
+            TARGET_BRANCH: main
+            CIRCLE_PROJECT_USERNAME: medalizaidi
+            CIRCLE_PROJECT_REPONAME: nifi-jar-automation-option2
+
+  ###########################################################
+  # 2️⃣ Build Docker image → push to ECR (after PR merge)
+  ###########################################################
+  build-and-push-image:
+    executor: docker-executor
+    steps:
+      - checkout
+
+      - setup_remote_docker:
+          version: 20.10.24
+          docker_layer_caching: true
+
+      - aws-cli/setup:
+          region: ${AWS_REGION}
+
+      - run:
+          name: Build and push image to ECR
+          command: |
+            aws ecr get-login-password --region ${AWS_REGION} | \
+              docker login --username AWS --password-stdin \
+              ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+
+            cd workload/mfx-aggre-data-platform/custom_nifi
+
+            IMAGE_TAG="${CIRCLE_SHA1:0:7}"
+            ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/apache-nifi-with-custom-jars-repo"
+
+            docker build -t ${ECR_REPO}:${IMAGE_TAG} .
+            docker push ${ECR_REPO}:${IMAGE_TAG}
+
+            echo "${IMAGE_TAG}" > /tmp/image-tag.txt
+
+      - persist_to_workspace:
+          root: /tmp
+          paths:
+            - image-tag.txt
+
+  ###########################################################
+  # 3️⃣ Create PR to update ecs_task_definition.tf
+  ###########################################################
+  create-task-definition-pr:
+    executor: python-executor
+    steps:
+      - checkout
+
+      - attach_workspace:
+          at: /tmp
+
+      - run:
+          name: Install dependencies
+          command: pip install PyGithub
+
+      - run:
+          name: Create ECS task definition PR
+          command: python scripts/update_task_definition.py
+          environment:
+            TASK_DEF_PATH: workload/mfx-aggre-data-platform/ecs_task_definition.tf
+            TARGET_BRANCH: main
+            CIRCLE_PROJECT_USERNAME: medalizaidi
+            CIRCLE_PROJECT_REPONAME: nifi-jar-automation-option2
+
+###########################################################
+# 🔄 WORKFLOWS (AUTO-TRIGGERED ON MERGE)
+###########################################################
 workflows:
-  setup-workflow:
+  version: 2
+
+  ###########################################################
+  # When JAR manifest changes → scan & create Dockerfile PR
+  ###########################################################
+  jar-manifest-change:
     jobs:
-      - path-filtering/filter:
-          name: check-updated-files
-          executor: path-filter-executor
-          base-revision: main
-          config-path: .circleci/continue_config.yml
-          mapping: |
-            workload/mfx-aggre-data-platform/custom_nifi/jars/.*.json jar-manifest-changed true
-            workload/mfx-aggre-data-platform/custom_nifi/Dockerfile dockerfile-changed true
+      - scan-jars-and-create-dockerfile-pr:
+          filters:
+            branches:
+              only: main
+            paths:
+              include:
+                - workload/mfx-aggre-data-platform/custom_nifi/jars/**
+
+  ###########################################################
+  # When Dockerfile PR is merged → build image & update task def
+  ###########################################################
+  dockerfile-change:
+    jobs:
+      - build-and-push-image:
+          filters:
+            branches:
+              only: main
+            paths:
+              include:
+                - workload/mfx-aggre-data-platform/custom_nifi/Dockerfile
+
+      - create-task-definition-pr:
+          requires:
+            - build-and-push-image
