@@ -4,3 +4,4 @@
     "install_path": "/opt/nifi/nifi-current/lib/",
     "description": "MySQL JDBC Driver"
   }
+ 
