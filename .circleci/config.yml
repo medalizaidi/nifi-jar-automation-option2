@@ -41,19 +41,39 @@ jobs:
       - run:
           name: Check if Dockerfile changed
           command: |
-            # Check if Dockerfile was modified in the last commit
+            # Check if Dockerfile was modified in this commit
             if git diff --name-only HEAD~1 HEAD | grep -q "workload/mfx-aggre-data-platform/custom_nifi/Dockerfile"; then
-              echo "✓ Dockerfile was modified - build will proceed"
-              exit 0
+              echo "Dockerfile modified, proceeding with build"
+              echo "true" > /tmp/dockerfile-changed.txt
             else
-              echo "✗ Dockerfile was not modified - stopping workflow"
-              exit 1
+              echo "Dockerfile not modified, skipping build and task definition PR"
+              echo "false" > /tmp/dockerfile-changed.txt
             fi
+      - persist_to_workspace:
+          root: /tmp
+          paths:
+            - dockerfile-changed.txt
 
   build-and-push-image:
     executor: docker-executor
     steps:
       - checkout
+      - attach_workspace:
+          at: /tmp
+      - run:
+          name: Check if should proceed
+          command: |
+            if [ ! -f /tmp/dockerfile-changed.txt ]; then
+              echo "ERROR: dockerfile-changed.txt not found"
+              exit 1
+            fi
+            
+            if [ "$(cat /tmp/dockerfile-changed.txt)" != "true" ]; then
+              echo "Dockerfile not modified, skipping build"
+              circleci-agent step halt
+            fi
+            
+            echo "Dockerfile was modified, proceeding with build"
       - setup_remote_docker:
           version: 20.10.24
           docker_layer_caching: true
@@ -64,8 +84,6 @@ jobs:
       - run:
           name: Build and Push to ECR
           command: |
-            echo "Building Docker image as Dockerfile has changed"
-            
             # Login to ECR
             aws ecr get-login-password --region ${AWS_REGION} | \
               docker login --username AWS --password-stdin \
@@ -89,6 +107,7 @@ jobs:
           root: /tmp
           paths:
             - image-tag.txt
+            - dockerfile-changed.txt
 
   create-task-definition-pr:
     executor: python-executor
@@ -96,6 +115,20 @@ jobs:
       - checkout
       - attach_workspace:
           at: /tmp
+      - run:
+          name: Check if should proceed
+          command: |
+            if [ ! -f /tmp/dockerfile-changed.txt ]; then
+              echo "ERROR: dockerfile-changed.txt not found"
+              exit 1
+            fi
+            
+            if [ "$(cat /tmp/dockerfile-changed.txt)" != "true" ]; then
+              echo "Dockerfile not modified, skipping task definition PR"
+              circleci-agent step halt
+            fi
+            
+            echo "Dockerfile was modified, proceeding with task definition update"
       - run:
           name: Install dependencies
           command: pip install PyGithub
@@ -111,26 +144,25 @@ jobs:
 workflows:
   version: 2
   
-  # Workflow 1: Always runs to scan JARs
-  scan-jars:
+  scan-and-build:
     jobs:
+      # Step 1: Scan JARs and create Dockerfile PR if needed
       - scan-jars-and-create-dockerfile-pr:
           filters:
             branches:
               only: main
           context:
             - github-context
-  
-  # Workflow 2: Only runs when Dockerfile changes
-  build-and-deploy:
-    jobs:
-      # Gate: Check if Dockerfile changed (fails if not, stopping the workflow)
+      
+      # Step 2: Check if Dockerfile was changed
       - check-dockerfile-changes:
+          requires:
+            - scan-jars-and-create-dockerfile-pr
           filters:
             branches:
               only: main
       
-      # Only runs if check passes
+      # Step 3: Build and push image ONLY if Dockerfile changed
       - build-and-push-image:
           requires:
             - check-dockerfile-changes
@@ -140,7 +172,7 @@ workflows:
           context:
             - aws-context
       
-      # Only runs if build succeeds
+      # Step 4: Create task definition PR ONLY if Dockerfile changed
       - create-task-definition-pr:
           requires:
             - build-and-push-image
@@ -149,4 +181,4 @@ workflows:
               only: main
           context:
             - github-context
-            - aws-context 
+            - aws-context
