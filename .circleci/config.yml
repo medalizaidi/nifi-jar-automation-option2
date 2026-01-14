@@ -3,6 +3,14 @@ version: 2.1
 orbs:
   aws-cli: circleci/aws-cli@4.1
 
+parameters:
+  jar-manifest-changed:
+    type: boolean
+    default: false
+  dockerfile-changed:
+    type: boolean
+    default: false
+
 executors:
   python-executor:
     docker:
@@ -15,19 +23,10 @@ executors:
     resource_class: medium
 
 jobs:
-  # Job 1: Scan for new JARs and create PR to update Dockerfile
   scan-jars-and-create-dockerfile-pr:
     executor: python-executor
     steps:
       - checkout
-      - run:
-          name: Check if JAR manifests changed
-          command: |
-            chmod +x scripts/check_changed_files.sh
-            if ! ./scripts/check_changed_files.sh jars; then
-              echo "No JAR changes detected, skipping this job"
-              circleci-agent step halt
-            fi
       - run:
           name: Install dependencies
           command: pip install PyGithub requests
@@ -44,19 +43,10 @@ jobs:
           path: /tmp/jar-diff-report.json
           destination: jar-diff-report
 
-  # Job 2: Build Docker image and push to ECR
   build-and-push-image:
     executor: docker-executor
     steps:
       - checkout
-      - run:
-          name: Check if Dockerfile changed
-          command: |
-            chmod +x scripts/check_changed_files.sh
-            if ! ./scripts/check_changed_files.sh dockerfile; then
-              echo "No Dockerfile changes detected, skipping this job"
-              circleci-agent step halt
-            fi
       - setup_remote_docker:
           version: 20.10.24
           docker_layer_caching: true
@@ -65,12 +55,10 @@ jobs:
       - run:
           name: Build and Push to ECR
           command: |
-            # Login to ECR
             aws ecr get-login-password --region ${AWS_REGION} | \
               docker login --username AWS --password-stdin \
               ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
 
-            # Build image
             cd workload/mfx-aggre-data-platform/custom_nifi
             IMAGE_TAG="${CIRCLE_SHA1:0:7}"
             ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/apache-nifi-with-custom-jars-repo"
@@ -78,18 +66,15 @@ jobs:
             docker build -t ${ECR_REPO}:${IMAGE_TAG} .
             docker tag ${ECR_REPO}:${IMAGE_TAG} ${ECR_REPO}:latest
 
-            # Push to ECR
             docker push ${ECR_REPO}:${IMAGE_TAG}
             docker push ${ECR_REPO}:latest
 
-            # Save tag for next job
             echo "${IMAGE_TAG}" > /tmp/image-tag.txt
       - persist_to_workspace:
           root: /tmp
           paths:
             - image-tag.txt
 
-  # Job 3: Create PR to update ECS task definition
   create-task-definition-pr:
     executor: python-executor
     steps:
@@ -109,25 +94,19 @@ jobs:
             CIRCLE_PROJECT_REPONAME: nifi-jar-automation-option2
 
 workflows:
-  jar-to-deployment:
+  jar-manifest-workflow:
+    when: << pipeline.parameters.jar-manifest-changed >>
     jobs:
-      # Step 1: When JAR manifest is added, scan and create Dockerfile PR
       - scan-jars-and-create-dockerfile-pr:
-          filters:
-            branches:
-              only: main
           context:
             - github-context
 
-      # Step 2: Build Docker image (runs after Dockerfile changes are merged)
+  dockerfile-workflow:
+    when: << pipeline.parameters.dockerfile-changed >>
+    jobs:
       - build-and-push-image:
-          filters:
-            branches:
-              only: main
           context:
             - aws-context
-
-      # Step 3: Create PR to update task definition with new image (END)
       - create-task-definition-pr:
           requires:
             - build-and-push-image
