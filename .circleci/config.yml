@@ -14,6 +14,23 @@ executors:
     resource_class: medium
 
 jobs:
+  # Check if JAR manifest files changed
+  check-jar-changes:
+    executor: python-executor
+    steps:
+      - checkout
+      - run:
+          name: Check if JAR manifests changed
+          command: |
+            # Check if any JAR manifest files changed
+            if git diff --name-only HEAD~1 HEAD | grep -q "workload/.*\/jars\/.*\.json"; then
+              echo "✓ JAR manifest files changed - proceeding with pipeline"
+              exit 0
+            else
+              echo "✗ No JAR manifest changes - stopping pipeline"
+              circleci-agent step halt
+            fi
+
   scan-jars-and-create-dockerfile-pr:
     executor: python-executor
     steps:
@@ -143,26 +160,40 @@ jobs:
 
 workflows:
   version: 2
-  
+
   scan-and-build:
     jobs:
-      
+      # Step 1: Check if JAR manifests changed (stops pipeline if no changes)
+      - check-jar-changes:
+          filters:
+            branches:
+              only: main
+
+      # Step 2: Scan JARs and create Dockerfile PR
       - scan-jars-and-create-dockerfile-pr:
+          requires:
+            - check-jar-changes
           filters:
             branches:
               only: main
           context:
             - github-context
-      
-      
-      - check-dockerfile-changes:
+
+      # Step 3: Manual approval - requires user to approve before continuing
+      - hold-for-approval:
+          type: approval
           requires:
             - scan-jars-and-create-dockerfile-pr
+
+      # Step 4: Check if Dockerfile changed
+      - check-dockerfile-changes:
+          requires:
+            - hold-for-approval
           filters:
             branches:
               only: main
-      
-      
+
+      # Step 5: Build and push Docker image
       - build-and-push-image:
           requires:
             - check-dockerfile-changes
@@ -171,8 +202,8 @@ workflows:
               only: main
           context:
             - aws-context
-      
-      
+
+      # Step 6: Create task definition PR
       - create-task-definition-pr:
           requires:
             - build-and-push-image
