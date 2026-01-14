@@ -120,7 +120,7 @@ def create_github_pr(
     current_file = repo.get_contents(task_def_path, ref=target_branch)
     
     # Update file in new branch
-    commit_message = f"Update NiFi image to {image_tag}"
+    commit_message = f"Update NiFi image to {image_tag} [skip ci]"
     
     repo.update_file(
         path=task_def_path,

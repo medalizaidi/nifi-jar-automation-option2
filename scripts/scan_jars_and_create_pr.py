@@ -231,7 +231,7 @@ def create_github_pr(
         file_sha = None
     
     # Create/Update file in new branch
-    commit_message = f"Add new JAR(s): {', '.join(jar_names)}"
+    commit_message = f"Add new JAR(s): {', '.join(jar_names)} [skip ci]"
     
     if file_sha:
         repo.update_file(

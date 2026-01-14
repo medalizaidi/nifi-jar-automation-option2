@@ -14,22 +14,7 @@ executors:
     resource_class: medium
 
 jobs:
-  # Check if JAR manifest files changed
-  check-jar-changes:
-    executor: python-executor
-    steps:
-      - checkout
-      - run:
-          name: Check if JAR manifests changed
-          command: |
-            # Check if any JAR manifest files changed
-            if git diff --name-only HEAD~1 HEAD | grep -q "workload/.*\/jars\/.*\.json"; then
-              echo "✓ JAR manifest files changed - proceeding with pipeline"
-              exit 0
-            else
-              echo "✗ No JAR manifest changes - stopping pipeline"
-              circleci-agent step halt
-            fi
+
 
   scan-jars-and-create-dockerfile-pr:
     executor: python-executor
@@ -163,16 +148,8 @@ workflows:
 
   scan-and-build:
     jobs:
-      # Step 1: Check if JAR manifests changed (stops pipeline if no changes)
-      - check-jar-changes:
-          filters:
-            branches:
-              only: main
-
       # Step 2: Scan JARs and create Dockerfile PR
       - scan-jars-and-create-dockerfile-pr:
-          requires:
-            - check-jar-changes
           filters:
             branches:
               only: main
