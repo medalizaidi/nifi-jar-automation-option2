@@ -181,4 +181,4 @@ workflows:
               only: main
           context:
             - github-context
-            - aws-context
+            - aws-context 
