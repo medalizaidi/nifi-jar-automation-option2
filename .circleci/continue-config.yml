@@ -16,7 +16,7 @@ executors:
 
   docker-executor:
     docker:
-      - image: cimg/base:current
+      - image: cimg/python:3.11
     resource_class: medium
 
 jobs:
