@@ -15,15 +15,18 @@ executors:
     resource_class: medium
 
 jobs:
-  #################################################
-  # 1️⃣ Scan JARs → create Dockerfile PR
-  #################################################
+  ###########################################################
+  # 1️⃣ Scan JAR manifest → create Dockerfile PR (if needed)
+  ###########################################################
   scan-jars-and-create-dockerfile-pr:
     executor: python-executor
     steps:
       - checkout
+
       - run:
+          name: Install dependencies
           command: pip install PyGithub requests
+
       - run:
           name: Scan JARs and create Dockerfile PR
           command: python scripts/scan_jars_and_create_pr.py
@@ -34,25 +37,30 @@ jobs:
             CIRCLE_PROJECT_USERNAME: medalizaidi
             CIRCLE_PROJECT_REPONAME: nifi-jar-automation-option2
 
-  #################################################
-  # 2️⃣ Build & push Docker image
-  #################################################
+  ###########################################################
+  # 2️⃣ Build Docker image → push to ECR (after PR merge)
+  ###########################################################
   build-and-push-image:
     executor: docker-executor
     steps:
       - checkout
+
       - setup_remote_docker:
           version: 20.10.24
+          docker_layer_caching: true
+
       - aws-cli/setup:
-          region: ${AWS_REGION}
+          region: AWS_REGION
+
       - run:
-          name: Build and push image
+          name: Build and push image to ECR
           command: |
             aws ecr get-login-password --region ${AWS_REGION} | \
               docker login --username AWS --password-stdin \
               ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
 
             cd workload/mfx-aggre-data-platform/custom_nifi
+
             IMAGE_TAG="${CIRCLE_SHA1:0:7}"
             ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/apache-nifi-with-custom-jars-repo"
 
@@ -60,24 +68,29 @@ jobs:
             docker push ${ECR_REPO}:${IMAGE_TAG}
 
             echo "${IMAGE_TAG}" > /tmp/image-tag.txt
+
       - persist_to_workspace:
           root: /tmp
           paths:
             - image-tag.txt
 
-  #################################################
-  # 3️⃣ Create ECS task definition PR
-  #################################################
+  ###########################################################
+  # 3️⃣ Create PR to update ecs_task_definition.tf
+  ###########################################################
   create-task-definition-pr:
     executor: python-executor
     steps:
       - checkout
+
       - attach_workspace:
           at: /tmp
+
       - run:
+          name: Install dependencies
           command: pip install PyGithub
+
       - run:
-          name: Create task definition PR
+          name: Create ECS task definition PR
           command: python scripts/update_task_definition.py
           environment:
             TASK_DEF_PATH: workload/mfx-aggre-data-platform/ecs_task_definition.tf
@@ -85,33 +98,32 @@ jobs:
             CIRCLE_PROJECT_USERNAME: medalizaidi
             CIRCLE_PROJECT_REPONAME: nifi-jar-automation-option2
 
-#################################################
-# 🔄 SINGLE VALID WORKFLOW
-#################################################
+###########################################################
+# 🔄 WORKFLOWS
+###########################################################
 workflows:
   version: 2
 
-  jar-to-deployment:
+  # Main workflow - triggers based on branch only
+  # Path filtering must be done via CircleCI API or dynamic config
+  main-workflow:
     jobs:
-      # Run ONLY when JAR manifests change
+      # Job 1: Runs on main branch pushes
       - scan-jars-and-create-dockerfile-pr:
           filters:
             branches:
               only: main
-            paths:
-              include:
-                - workload/mfx-aggre-data-platform/custom_nifi/jars/**
 
-      # Run ONLY when Dockerfile is merged
+      # Job 2: Runs on main branch pushes
       - build-and-push-image:
           filters:
             branches:
               only: main
-            paths:
-              include:
-                - workload/mfx-aggre-data-platform/custom_nifi/Dockerfile
 
-      # Run AFTER image build
+      # Job 3: Runs after image is built
       - create-task-definition-pr:
           requires:
             - build-and-push-image
+          filters:
+            branches:
+              only: main
