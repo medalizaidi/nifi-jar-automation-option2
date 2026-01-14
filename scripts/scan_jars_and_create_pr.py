@@ -250,7 +250,7 @@ def create_github_pr(
         )
     
     # Create PR
-    pr_title = f"[Auto] Add JAR(s): {', '.join(jar_names)}"
+    pr_title = f"[Auto] Add JAR(s): {', '.join(jar_names)} [skip ci]"
     
     pr_body = f"""## Automated JAR Addition
 

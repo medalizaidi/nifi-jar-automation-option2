@@ -131,7 +131,7 @@ def create_github_pr(
     )
     
     # Create PR
-    pr_title = f"[Auto] Update NiFi Docker image to {image_tag}"
+    pr_title = f"[Auto] Update NiFi Docker image to {image_tag} [skip ci]"
     
     pr_body = f"""## Automated Task Definition Update
 
