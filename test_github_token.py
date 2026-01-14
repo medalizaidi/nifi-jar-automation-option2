@@ -5,7 +5,7 @@ Test script to verify GitHub token and repository access
 from github import Github, Auth
 
 # Replace with your token
-GITHUB_TOKEN = "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"
+GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN')
 REPO_OWNER = "medalizaidi"
 REPO_NAME = "nifi-jar-automation-option2"
 
