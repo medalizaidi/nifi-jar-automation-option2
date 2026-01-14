@@ -17,11 +17,6 @@ executors:
       - image: cimg/python:3.12
     resource_class: medium
 
-  docker-executor:
-    docker:
-      - image: cimg/base:current
-    resource_class: medium
-
 jobs:
   # Job 1: Scan for new JARs and create PR to update Dockerfile
   scan-jars-and-create-dockerfile-pr:
@@ -51,7 +46,7 @@ jobs:
 
   # Job 2: Build Docker image and push to ECR
   build-and-push-image:
-    executor: docker-executor
+    executor: python-executor
     steps:
       - checkout
       - setup_remote_docker:

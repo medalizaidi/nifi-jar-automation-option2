@@ -5,10 +5,18 @@ setup: true
 orbs:
   path-filtering: circleci/path-filtering@1.1.0
 
+executors:
+  path-filter-executor:
+    docker:
+      - image: cimg/base:2024.09
+    resource_class: small
+
 workflows:
   setup-workflow:
     jobs:
       - path-filtering/filter:
+          name: check-updated-files
+          executor: path-filter-executor
           base-revision: main
           config-path: .circleci/continue_config.yml
           mapping: |
