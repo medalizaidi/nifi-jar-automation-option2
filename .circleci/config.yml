@@ -104,19 +104,17 @@ workflows:
             - github-context
 
       # Step 2: Build Docker image (runs after Dockerfile changes are merged)
-      # DISABLED: Uncomment when ready to test Docker build and ECR push
-      # - build-and-push-image:
-      #     filters:
-      #       branches:
-      #         only: main
-      #     context:
-      #       - aws-context
+      - build-and-push-image:
+          filters:
+            branches:
+              only: main
+          context:
+            - aws-context
 
       # Step 3: Create PR to update task definition with new image (END)
-      # DISABLED: Depends on Job 2 completing
-      # - create-task-definition-pr:
-      #     requires:
-      #       - build-and-push-image
-      #     context:
-      #       - github-context
-      #       - aws-context
+      - create-task-definition-pr:
+          requires:
+            - build-and-push-image
+          context:
+            - github-context
+            - aws-context
