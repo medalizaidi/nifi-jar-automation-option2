@@ -15,7 +15,7 @@ resource "aws_ecs_task_definition" "nifi" {
   container_definitions = jsonencode([
     {
       "name" : "nifi",
-      "image" : "478874601698.dkr.ecr.ap-northeast-1.amazonaws.com/apache-nifi-with-custom-jars-repo:latest",
+      "image" : "478874601698.dkr.ecr.ap-northeast-1.amazonaws.com/apache-nifi-with-custom-jars-repo:b9b277c",
       "essential" : true,
 
       "cpu" : 2048,
