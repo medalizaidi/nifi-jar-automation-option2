@@ -28,7 +28,8 @@ jobs:
             DOCKERFILE_PATH: workload/mfx-aggre-data-platform/custom_nifi/Dockerfile
             JARS_FOLDER: workload/mfx-aggre-data-platform/custom_nifi/jars
             TARGET_BRANCH: main
-
+            CIRCLE_PROJECT_USERNAME: ${GITHUB_TARGET_USERNAME}
+            CIRCLE_PROJECT_REPONAME: ${GITHUB_TARGET_REPONAME}
       - store_artifacts:
           path: /tmp/jar-diff-report.json
           destination: jar-diff-report
@@ -137,7 +138,8 @@ jobs:
           environment:
             TASK_DEF_PATH: workload/mfx-aggre-data-platform/ecs_task_definition.tf
             TARGET_BRANCH: main
-
+            CIRCLE_PROJECT_USERNAME: ${GITHUB_TARGET_USERNAME}
+            CIRCLE_PROJECT_REPONAME: ${GITHUB_TARGET_REPONAME}
 
 workflows:
   version: 2

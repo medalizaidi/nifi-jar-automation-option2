@@ -32,10 +32,6 @@ RUN curl -L "https://jdbc.postgresql.org/download/postgresql-42.7.1.jar" \
 
 
 
-# Download MariaDB JDBC Driver
-RUN curl -L "https://repo1.maven.org/maven2/org/mariadb/jdbc/mariadb-java-client/3.3.3/mariadb-java-client-3.3.3.jar" \
-        -o /opt/nifi/nifi-current/lib/mariadb-java-client-3.3.3.jar && \
-        chown 1000:1000 /opt/nifi/nifi-current/lib/mariadb-java-client-3.3.3.jar
 
 
 # Download MongoDB Sync Driver
