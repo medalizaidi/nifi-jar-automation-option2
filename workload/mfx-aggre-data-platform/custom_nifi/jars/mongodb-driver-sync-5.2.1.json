@@ -1,0 +1,9 @@
+{
+    "name": "mongodb-driver-sync-5.2.1.jar",
+    "url": "https://repo1.maven.org/maven2/org/mongodb/mongodb-driver-sync/5.2.1/mongodb-driver-sync-5.2.1.jar",
+    "install_path": "/opt/nifi/nifi-current/lib/",
+    "description": "MongoDB Sync Driver",
+    "requested_by": "test-workflow",
+    "reason": "Testing the automated JAR deployment workflow",
+    "version": "5.2.1"
+}
