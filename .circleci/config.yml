@@ -14,8 +14,6 @@ executors:
     resource_class: medium
 
 jobs:
-  # Job 1: Scan for new JARs and create PR to update Dockerfile
-  # This runs when JAR manifest changes are merged to main
   scan-jars-and-create-dockerfile-pr:
     executor: python-executor
     steps:
@@ -36,12 +34,18 @@ jobs:
           path: /tmp/jar-diff-report.json
           destination: jar-diff-report
 
-  # Job 2: Build Docker image and push to ECR
-  # This runs when Dockerfile changes are merged to main
   build-and-push-image:
     executor: docker-executor
     steps:
       - checkout
+      - run:
+          name: Check if Dockerfile changed
+          command: |
+            # Check if Dockerfile was modified in this commit
+            if ! git diff --name-only HEAD~1 HEAD | grep -q "workload/mfx-aggre-data-platform/custom_nifi/Dockerfile"; then
+              echo "Dockerfile not modified, skipping build"
+              circleci-agent step halt
+            fi
       - setup_remote_docker:
           version: 20.10.24
           docker_layer_caching: true
@@ -76,8 +80,6 @@ jobs:
           paths:
             - image-tag.txt
 
-  # Job 3: Create PR to update ECS task definition
-  # This runs after successful image build
   create-task-definition-pr:
     executor: python-executor
     steps:
@@ -97,8 +99,6 @@ jobs:
             CIRCLE_PROJECT_REPONAME: nifi-jar-automation-option2
 
 workflows:
-  # Workflow 1: When JAR manifest changes are merged to main
-  # Trigger: Merge PR with JAR manifest changes → Scan runs → Creates Dockerfile PR
   scan-on-jar-changes:
     jobs:
       - scan-jars-and-create-dockerfile-pr:
@@ -108,17 +108,12 @@ workflows:
           context:
             - github-context
 
-  # Workflow 2: When Dockerfile changes are merged to main
-  # Trigger: Merge Dockerfile PR → Build runs → Creates ECS task def PR
   build-on-dockerfile-changes:
     jobs:
       - build-and-push-image:
           filters:
             branches:
               only: main
-            # This path filter ensures the job only runs when Dockerfile is modified
-            paths:
-              only: workload/mfx-aggre-data-platform/custom_nifi/Dockerfile
           context:
             - aws-context
       
