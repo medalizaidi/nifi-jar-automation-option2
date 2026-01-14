@@ -330,7 +330,7 @@ def main():
     # Get paths from environment
     dockerfile_path = os.environ.get('DOCKERFILE_PATH', 'workload/mfx-aggre-data-platform/custom_nifi/Dockerfile')
     jars_folder = os.environ.get('JARS_FOLDER', 'workload/mfx-aggre-data-platform/custom_nifi/jars')
-    target_branch = os.environ.get('TARGET_BRANCH', 'master')
+    target_branch = os.environ.get('TARGET_BRANCH', 'main')
     
     print(f"Scanning Dockerfile: {dockerfile_path}")
     print(f"Scanning JARs folder: {jars_folder}")

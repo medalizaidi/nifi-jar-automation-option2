@@ -176,7 +176,7 @@ If issues occur, revert this PR or update the image tag to the previous version:
 def main():
     # Get configuration from environment
     task_def_path = os.environ.get('TASK_DEF_PATH', 'workload/mfx-aggre-data-platform/ecs_task_definition.tf')
-    target_branch = os.environ.get('TARGET_BRANCH', 'master')
+    target_branch = os.environ.get('TARGET_BRANCH', 'main')
     aws_account_id = os.environ.get('AWS_ACCOUNT_ID')
     aws_region = os.environ.get('AWS_REGION', 'ap-northeast-1')
     
