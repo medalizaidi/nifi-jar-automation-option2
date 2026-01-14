@@ -1,0 +1,9 @@
+{
+    "name": "cassandra-driver-core-4.17.0.jar",
+    "url": "https://repo1.maven.org/maven2/com/datastax/oss/java-driver-core/4.17.0/java-driver-core-4.17.0.jar",
+    "install_path": "/opt/nifi/nifi-current/lib/",
+    "description": "DataStax Cassandra Java Driver",
+    "requested_by": "test-workflow",
+    "reason": "Testing the automated JAR deployment workflow with dynamic config",
+    "version": "4.17.0"
+}
