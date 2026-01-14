@@ -4,19 +4,35 @@ version: 2.1
 setup: true
 
 orbs:
-  path-filtering: circleci/path-filtering@1.1.0
+  path-filtering: circleci/path-filtering@1.4.0
+  continuation: circleci/continuation@1.0.0
 
 executors:
   python-executor:
     docker:
       - image: cimg/python:3.11
 
+jobs:
+  check-path-and-continue:
+    executor: python-executor
+    steps:
+      - checkout
+      - run:
+          name: Check if JAR files changed
+          command: |
+            # Check if any JAR manifest files changed
+            if git diff --name-only HEAD~1 HEAD | grep -q "workload/mfx-aggre-data-platform/custom_nifi/jars/.*\.json"; then
+              echo "export RUN_MAIN_WORKFLOW=true" >> $BASH_ENV
+              echo "✓ JAR manifest files changed - triggering main workflow"
+            else
+              echo "export RUN_MAIN_WORKFLOW=false" >> $BASH_ENV
+              echo "✗ No JAR manifest changes - skipping main workflow"
+            fi
+      - continuation/continue:
+          configuration_path: .circleci/continue-config.yml
+          parameters: '{"run-main-workflow": ${RUN_MAIN_WORKFLOW}}'
+
 workflows:
   setup-workflow:
     jobs:
-      - path-filtering/filter:
-          executor: python-executor
-          base-revision: main
-          config-path: .circleci/continue-config.yml
-          mapping: |
-            workload/mfx-aggre-data-platform/custom_nifi/jars/.*\.json run-main-workflow true
+      - check-path-and-continue
