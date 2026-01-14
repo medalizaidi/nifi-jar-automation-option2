@@ -65,7 +65,7 @@ def create_github_pr(
     """
     Create a GitHub PR with the task definition changes.
     """
-    github_token = "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"
+    github_token = "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"
     repo_name = os.environ.get('CIRCLE_PROJECT_REPONAME')
     repo_owner = os.environ.get('CIRCLE_PROJECT_USERNAME')
 
