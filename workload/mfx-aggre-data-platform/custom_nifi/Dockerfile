@@ -58,6 +58,12 @@ RUN curl -L "https://repo1.maven.org/maven2/com/datastax/oss/java-driver-core/4.
         -o /opt/nifi/nifi-current/lib/cassandra-driver-core-4.17.0.jar && \
         chown 1000:1000 /opt/nifi/nifi-current/lib/cassandra-driver-core-4.17.0.jar
 
+
+# Download MongoDB Sync Driver
+RUN curl -L "https://repo1.maven.org/maven2/org/mongodb/mongodb-driver-sync/5.2.1/mongodb-driver-sync-5.2.1.jar" \
+        -o /opt/nifi/nifi-current/lib/mongodb-driver-sync-5.2.1.jar && \
+        chown 1000:1000 /opt/nifi/nifi-current/lib/mongodb-driver-sync-5.2.1.jar
+
 # ============================================================
 # NEW JARS WILL BE ADDED AUTOMATICALLY ABOVE THIS LINE
 # DO NOT REMOVE THIS COMMENT - IT'S USED BY THE CI PIPELINE
