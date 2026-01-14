@@ -146,7 +146,7 @@ workflows:
   
   scan-and-build:
     jobs:
-      # Step 1: Scan JARs and create Dockerfile PR if needed
+      
       - scan-jars-and-create-dockerfile-pr:
           filters:
             branches:
@@ -154,7 +154,7 @@ workflows:
           context:
             - github-context
       
-      # Step 2: Check if Dockerfile was changed
+      
       - check-dockerfile-changes:
           requires:
             - scan-jars-and-create-dockerfile-pr
@@ -162,7 +162,7 @@ workflows:
             branches:
               only: main
       
-      # Step 3: Build and push image ONLY if Dockerfile changed
+      
       - build-and-push-image:
           requires:
             - check-dockerfile-changes
@@ -172,7 +172,7 @@ workflows:
           context:
             - aws-context
       
-      # Step 4: Create task definition PR ONLY if Dockerfile changed
+      
       - create-task-definition-pr:
           requires:
             - build-and-push-image

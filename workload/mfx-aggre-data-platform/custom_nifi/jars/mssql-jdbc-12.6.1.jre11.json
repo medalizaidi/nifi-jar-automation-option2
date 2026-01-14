@@ -1,0 +1,9 @@
+{
+    "name": "mssql-jdbc-12.6.1.jre11.jar",
+    "url": "https://repo1.maven.org/maven2/com/microsoft/sqlserver/mssql-jdbc/12.6.1.jre11/mssql-jdbc-12.6.1.jre11.jar",
+    "install_path": "/opt/nifi/nifi-current/lib/",
+    "description": "Microsoft SQL Server JDBC Driver",
+    "requested_by": "test-workflow",
+    "reason": "Testing the automated JAR deployment workflow",
+    "version": "12.6.1"
+}
