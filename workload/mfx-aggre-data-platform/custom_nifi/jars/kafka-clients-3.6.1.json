@@ -1,0 +1,9 @@
+{
+    "name": "kafka-clients-3.6.1.jar",
+    "url": "https://repo1.maven.org/maven2/org/apache/kafka/kafka-clients/3.6.1/kafka-clients-3.6.1.jar",
+    "install_path": "/opt/nifi/nifi-current/lib/",
+    "description": "Apache Kafka Client Library",
+    "requested_by": "test-workflow",
+    "reason": "Testing the automated JAR deployment workflow",
+    "version": "3.6.1"
+}
