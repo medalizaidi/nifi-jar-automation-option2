@@ -51,6 +51,12 @@ RUN curl -L "https://repo1.maven.org/maven2/com/oracle/database/jdbc/ojdbc11/23.
         -o /opt/nifi/nifi-current/lib/ojdbc11-23.3.0.23.09.jar && \
         chown 1000:1000 /opt/nifi/nifi-current/lib/ojdbc11-23.3.0.23.09.jar
 
+
+# Download Microsoft SQL Server JDBC Driver
+RUN curl -L "https://repo1.maven.org/maven2/com/microsoft/sqlserver/mssql-jdbc/12.6.1.jre11/mssql-jdbc-12.6.1.jre11.jar" \
+        -o /opt/nifi/nifi-current/lib/mssql-jdbc-12.6.1.jre11.jar && \
+        chown 1000:1000 /opt/nifi/nifi-current/lib/mssql-jdbc-12.6.1.jre11.jar
+
 # ============================================================
 # NEW JARS WILL BE ADDED AUTOMATICALLY ABOVE THIS LINE
 # DO NOT REMOVE THIS COMMENT - IT'S USED BY THE CI PIPELINE
