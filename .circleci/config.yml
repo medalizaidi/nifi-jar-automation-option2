@@ -25,16 +25,29 @@ jobs:
             # Check if any JAR manifest files changed
             if git diff --name-only HEAD~1 HEAD | grep -q "workload/.*\/jars\/.*\.json"; then
               echo "✓ JAR manifest files changed - proceeding with pipeline"
-              exit 0
+              echo "true" > /tmp/jar-changes-detected.txt
             else
-              echo "✗ No JAR manifest changes - stopping pipeline"
-              circleci-agent step halt
+              echo "✗ No JAR manifest changes - marking pipeline to skip"
+              echo "false" > /tmp/jar-changes-detected.txt
             fi
+      - persist_to_workspace:
+          root: /tmp
+          paths:
+            - jar-changes-detected.txt
 
   scan-jars-and-create-dockerfile-pr:
     executor: python-executor
     steps:
       - checkout
+      - attach_workspace:
+          at: /tmp
+      - run:
+          name: Check if should proceed
+          command: |
+            if [ "$(cat /tmp/jar-changes-detected.txt)" != "true" ]; then
+              echo "No JAR changes detected, skipping this job"
+              circleci-agent step halt
+            fi
       - run:
           name: Install dependencies
           command: pip install PyGithub requests
