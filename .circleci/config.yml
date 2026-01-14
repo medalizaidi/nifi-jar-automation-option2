@@ -82,8 +82,8 @@ jobs:
             ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/apache-nifi-with-custom-jars-repo"
             
             echo "Building Docker image with dynamically added JARs..."
-            docker build -t ${ECR_REPO}:${IMAGE_TAG} .
-            docker tag ${ECR_REPO}:${IMAGE_TAG} ${ECR_REPO}:latest
+            docker build -t${IMAGE_TAG} .
+            docker tag ${IMAGE_TAG} ${IMAGE_TAG}:latest
             
             # Push to ECR
             # docker push ${ECR_REPO}:${IMAGE_TAG}
