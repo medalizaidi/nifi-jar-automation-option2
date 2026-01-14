@@ -1,0 +1,9 @@
+{
+    "name": "jedis-5.1.0.jar",
+    "url": "https://repo1.maven.org/maven2/redis/clients/jedis/5.1.0/jedis-5.1.0.jar",
+    "install_path": "/opt/nifi/nifi-current/lib/",
+    "description": "Jedis - Redis Java Client",
+    "requested_by": "test-workflow",
+    "reason": "Testing the automated JAR deployment workflow",
+    "version": "5.1.0"
+}
