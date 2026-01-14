@@ -23,6 +23,12 @@ RUN sed -i -e 's|^nifi.flow.configuration.file=.*$|nifi.flow.configuration.file=
         -e 's|^nifi.flow.configuration.archive.dir=.*$|nifi.flow.configuration.archive.dir=/opt/nifi/nifi-current/flow_config/archive|' \
         conf/nifi.properties
 
+
+# Download PostgreSQL JDBC Driver
+RUN curl -L "https://jdbc.postgresql.org/download/postgresql-42.7.1.jar" \
+        -o /opt/nifi/nifi-current/lib/postgresql-42.7.1.jar && \
+        chown 1000:1000 /opt/nifi/nifi-current/lib/postgresql-42.7.1.jar
+
 # ============================================================
 # NEW JARS WILL BE ADDED AUTOMATICALLY ABOVE THIS LINE
 # DO NOT REMOVE THIS COMMENT - IT'S USED BY THE CI PIPELINE
