@@ -14,7 +14,7 @@ parameters:
 executors:
   python-executor:
     docker:
-      - image: cimg/python:3.11
+      - image: cimg/python:3.12
     resource_class: medium
 
   docker-executor:
@@ -23,13 +23,19 @@ executors:
     resource_class: medium
 
 jobs:
+  # Job 1: Scan for new JARs and create PR to update Dockerfile
   scan-jars-and-create-dockerfile-pr:
     executor: python-executor
     steps:
       - checkout
       - run:
+          name: Verify Python version
+          command: python --version
+      - run:
           name: Install dependencies
-          command: pip install PyGithub requests
+          command: |
+            python -m pip install --upgrade pip
+            pip install PyGithub requests
       - run:
           name: Scan JARs and create Dockerfile PR
           command: python scripts/scan_jars_and_create_pr.py
@@ -43,6 +49,7 @@ jobs:
           path: /tmp/jar-diff-report.json
           destination: jar-diff-report
 
+  # Job 2: Build Docker image and push to ECR
   build-and-push-image:
     executor: docker-executor
     steps:
@@ -55,26 +62,33 @@ jobs:
       - run:
           name: Build and Push to ECR
           command: |
+            echo "=== Starting ECR Login ==="
             aws ecr get-login-password --region ${AWS_REGION} | \
               docker login --username AWS --password-stdin \
               ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
 
+            echo "=== Building Docker Image ==="
             cd workload/mfx-aggre-data-platform/custom_nifi
             IMAGE_TAG="${CIRCLE_SHA1:0:7}"
             ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/apache-nifi-with-custom-jars-repo"
 
+            echo "Building image with tag: ${IMAGE_TAG}"
             docker build -t ${ECR_REPO}:${IMAGE_TAG} .
             docker tag ${ECR_REPO}:${IMAGE_TAG} ${ECR_REPO}:latest
 
+            echo "=== Pushing to ECR ==="
             docker push ${ECR_REPO}:${IMAGE_TAG}
             docker push ${ECR_REPO}:latest
 
+            echo "=== Saving Image Tag ==="
             echo "${IMAGE_TAG}" > /tmp/image-tag.txt
+            echo "Successfully pushed: ${ECR_REPO}:${IMAGE_TAG}"
       - persist_to_workspace:
           root: /tmp
           paths:
             - image-tag.txt
 
+  # Job 3: Create PR to update ECS task definition
   create-task-definition-pr:
     executor: python-executor
     steps:
@@ -82,8 +96,22 @@ jobs:
       - attach_workspace:
           at: /tmp
       - run:
+          name: Verify Python version
+          command: python --version
+      - run:
+          name: Verify image tag
+          command: |
+            if [ -f /tmp/image-tag.txt ]; then
+              echo "Image tag found: $(cat /tmp/image-tag.txt)"
+            else
+              echo "ERROR: Image tag file not found!"
+              exit 1
+            fi
+      - run:
           name: Install dependencies
-          command: pip install PyGithub
+          command: |
+            python -m pip install --upgrade pip
+            pip install PyGithub
       - run:
           name: Create PR to update task definition
           command: python scripts/update_task_definition.py
@@ -94,6 +122,7 @@ jobs:
             CIRCLE_PROJECT_REPONAME: nifi-jar-automation-option2
 
 workflows:
+  # Workflow 1: JAR manifest changes → Create Dockerfile PR
   jar-manifest-workflow:
     when: << pipeline.parameters.jar-manifest-changed >>
     jobs:
@@ -101,6 +130,7 @@ workflows:
           context:
             - github-context
 
+  # Workflow 2: Dockerfile changes → Build & Deploy
   dockerfile-workflow:
     when: << pipeline.parameters.dockerfile-changed >>
     jobs:
