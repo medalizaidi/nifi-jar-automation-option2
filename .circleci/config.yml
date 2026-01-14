@@ -1,10 +1,5 @@
 version: 2.1
 
-parameters:
-  dockerfile_changed:
-    type: boolean
-    default: false
-
 orbs:
   aws-cli: circleci/aws-cli@4.1
 
@@ -13,7 +8,6 @@ executors:
     docker:
       - image: cimg/python:3.11
     resource_class: medium
-
   docker-executor:
     docker:
       - image: cimg/base:current
@@ -45,20 +39,41 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Detect Dockerfile change
+          name: Check if Dockerfile changed
           command: |
+            # Check if Dockerfile was modified in this commit
             if git diff --name-only HEAD~1 HEAD | grep -q "workload/mfx-aggre-data-platform/custom_nifi/Dockerfile"; then
-              echo "Dockerfile modified"
-              circleci-agent continue --parameter dockerfile_changed=true
+              echo "Dockerfile modified, proceeding with build"
+              echo "true" > /tmp/dockerfile-changed.txt
             else
-              echo "Dockerfile not modified"
-              circleci-agent continue --parameter dockerfile_changed=false
+              echo "Dockerfile not modified, skipping build and task definition PR"
+              echo "false" > /tmp/dockerfile-changed.txt
             fi
+      - persist_to_workspace:
+          root: /tmp
+          paths:
+            - dockerfile-changed.txt
 
   build-and-push-image:
     executor: docker-executor
     steps:
       - checkout
+      - attach_workspace:
+          at: /tmp
+      - run:
+          name: Check if should proceed
+          command: |
+            if [ ! -f /tmp/dockerfile-changed.txt ]; then
+              echo "ERROR: dockerfile-changed.txt not found"
+              exit 1
+            fi
+            
+            if [ "$(cat /tmp/dockerfile-changed.txt)" != "true" ]; then
+              echo "Dockerfile not modified, skipping build"
+              circleci-agent step halt
+            fi
+            
+            echo "Dockerfile was modified, proceeding with build"
       - setup_remote_docker:
           version: 20.10.24
           docker_layer_caching: true
@@ -69,26 +84,30 @@ jobs:
       - run:
           name: Build and Push to ECR
           command: |
+            # Login to ECR
             aws ecr get-login-password --region ${AWS_REGION} | \
               docker login --username AWS --password-stdin \
               ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
-
+            
+            # Build image
             cd workload/mfx-aggre-data-platform/custom_nifi
-
             IMAGE_TAG="${CIRCLE_SHA1:0:7}"
             ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/apache-nifi-with-custom-jars-repo"
-
+            
             docker build -t ${ECR_REPO}:${IMAGE_TAG} .
             docker tag ${ECR_REPO}:${IMAGE_TAG} ${ECR_REPO}:latest
-
+            
+            # Push to ECR
             docker push ${ECR_REPO}:${IMAGE_TAG}
             docker push ${ECR_REPO}:latest
-
+            
+            # Save tag for next job
             echo "${IMAGE_TAG}" > /tmp/image-tag.txt
       - persist_to_workspace:
           root: /tmp
           paths:
             - image-tag.txt
+            - dockerfile-changed.txt
 
   create-task-definition-pr:
     executor: python-executor
@@ -96,6 +115,20 @@ jobs:
       - checkout
       - attach_workspace:
           at: /tmp
+      - run:
+          name: Check if should proceed
+          command: |
+            if [ ! -f /tmp/dockerfile-changed.txt ]; then
+              echo "ERROR: dockerfile-changed.txt not found"
+              exit 1
+            fi
+            
+            if [ "$(cat /tmp/dockerfile-changed.txt)" != "true" ]; then
+              echo "Dockerfile not modified, skipping task definition PR"
+              circleci-agent step halt
+            fi
+            
+            echo "Dockerfile was modified, proceeding with task definition update"
       - run:
           name: Install dependencies
           command: pip install PyGithub
@@ -109,33 +142,43 @@ jobs:
             CIRCLE_PROJECT_REPONAME: nifi-jar-automation-option2
 
 workflows:
-  scan-on-jar-changes:
+  version: 2
+  
+  scan-and-build:
     jobs:
+      # Step 1: Scan JARs and create Dockerfile PR if needed
       - scan-jars-and-create-dockerfile-pr:
           filters:
             branches:
               only: main
           context:
             - github-context
-
-  detect-dockerfile-change:
-    jobs:
+      
+      # Step 2: Check if Dockerfile was changed
       - check-dockerfile-changes:
+          requires:
+            - scan-jars-and-create-dockerfile-pr
           filters:
             branches:
               only: main
-
-  build-on-dockerfile-changes:
-    when: << pipeline.parameters.dockerfile_changed >>
-    jobs:
+      
+      # Step 3: Build and push image ONLY if Dockerfile changed
       - build-and-push-image:
+          requires:
+            - check-dockerfile-changes
+          filters:
+            branches:
+              only: main
           context:
             - aws-context
-
+      
+      # Step 4: Create task definition PR ONLY if Dockerfile changed
       - create-task-definition-pr:
           requires:
             - build-and-push-image
+          filters:
+            branches:
+              only: main
           context:
             - github-context
             - aws-context
- 
