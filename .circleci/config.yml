@@ -6,10 +6,16 @@ setup: true
 orbs:
   path-filtering: circleci/path-filtering@1.1.0
 
+executors:
+  python-executor:
+    docker:
+      - image: cimg/python:3.11
+
 workflows:
   setup-workflow:
     jobs:
       - path-filtering/filter:
+          executor: python-executor
           base-revision: main
           config-path: .circleci/continue-config.yml
           mapping: |
