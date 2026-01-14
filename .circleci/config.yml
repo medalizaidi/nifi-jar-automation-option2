@@ -15,7 +15,7 @@ executors:
 
 jobs:
   # Job 1: Scan for new JARs and create PR to update Dockerfile
-  # This runs when JAR manifest changes are merged to master
+  # This runs when JAR manifest changes are merged to main
   scan-jars-and-create-dockerfile-pr:
     executor: python-executor
     steps:
@@ -37,7 +37,7 @@ jobs:
           destination: jar-diff-report
 
   # Job 2: Build Docker image and push to ECR
-  # This runs when Dockerfile changes are merged to master
+  # This runs when Dockerfile changes are merged to main
   build-and-push-image:
     executor: docker-executor
     steps:
@@ -97,7 +97,7 @@ jobs:
             CIRCLE_PROJECT_REPONAME: nifi-jar-automation-option2
 
 workflows:
-  # Workflow 1: When JAR manifest changes are merged to master
+  # Workflow 1: When JAR manifest changes are merged to main
   # Trigger: Merge PR with JAR manifest changes → Scan runs → Creates Dockerfile PR
   scan-on-jar-changes:
     jobs:
@@ -108,7 +108,7 @@ workflows:
           context:
             - github-context
 
-  # Workflow 2: When Dockerfile changes are merged to master
+  # Workflow 2: When Dockerfile changes are merged to main
   # Trigger: Merge Dockerfile PR → Build runs → Creates ECS task def PR
   build-on-dockerfile-changes:
     jobs:
@@ -116,6 +116,9 @@ workflows:
           filters:
             branches:
               only: main
+            # This path filter ensures the job only runs when Dockerfile is modified
+            paths:
+              only: workload/mfx-aggre-data-platform/custom_nifi/Dockerfile
           context:
             - aws-context
       
