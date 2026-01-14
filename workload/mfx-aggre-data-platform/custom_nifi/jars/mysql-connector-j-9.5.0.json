@@ -1,6 +1,0 @@
-{
-  "name": "mysql-connector-j-9.5.0.jar",
-  "url": "https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.5.0/mysql-connector-j-9.5.0.jar",
-  "install_path": "/opt/nifi/nifi-current/lib/",
-  "description": "MySQL JDBC Driver"
-}
