@@ -23,11 +23,11 @@ jobs:
           name: Check if JAR manifests changed
           command: |
             # Check if any JAR manifest files changed
-            if git diff --name-only HEAD~1 HEAD | grep -q "workload/.*\/jars\/.*\.json"; then
+            if git diff --name-only HEAD~1 HEAD | grep -q "workload/mfx-aggre-data-platform/custom_nifi/jars/.*\.json"; then
               echo "✓ JAR manifest files changed - proceeding with pipeline"
               exit 0
             else
-              echo "✗ No JAR manifest changes - stopping pipeline"
+              echo "✗ No JAR manifest changes detected - halting pipeline"
               circleci-agent step halt
             fi
 
@@ -163,7 +163,7 @@ workflows:
 
   scan-and-build:
     jobs:
-      # Step 1: Check if JAR manifests changed (stops pipeline if no changes)
+      # Step 1: Check if JAR manifests changed (halts entire workflow if not)
       - check-jar-changes:
           filters:
             branches:
