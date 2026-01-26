@@ -28,7 +28,7 @@ NIFI_HOST = os.environ.get('NIFI_HOST')
 NIFI_USERNAME = os.environ.get('NIFI_USERNAME')
 NIFI_PASSWORD = os.environ.get('NIFI_PASSWORD')
 GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN')
-GITHUB_REPO = os.environ.get('GITHUB_REPO', 'medalizaidi/nifi-jar-automation-option2')
+GITHUB_REPO = os.environ.get('GITHUB_REPO', 'medalizaaidi/nifi-jar-automation-option2')
 BACKUP_BRANCH = os.environ.get('BACKUP_BRANCH', 'main')
 BACKUP_FOLDER = os.environ.get('BACKUP_FOLDER', 'nifi-backups')
 
@@ -433,10 +433,27 @@ def main():
             f.write(flow_json)
         print(f"✅ Backup saved locally: {output_file}")
         
+        # Save metadata for artifacts
+        metadata_output = "/tmp/rollback-metadata.json"
+        with open(metadata_output, 'w') as f:
+            json.dump({
+                'backup_date': BACKUP_DATE,
+                'backup_time': BACKUP_TIME,
+                'backup_path': backup_path,
+                'nifi_host': NIFI_HOST,
+                'root_process_group_id': root_pg_id,
+                'downloaded_at': datetime.utcnow().isoformat() + 'Z',
+                'backup_metadata': metadata,
+                'file_size_bytes': len(flow_json),
+                'output_file': output_file
+            }, f, indent=2)
+        print(f"✅ Metadata saved: {metadata_output}")
+        
         print("")
         print("=" * 60)
         print("✅ ROLLBACK PREPARATION COMPLETED")
         print("   📄 Backup downloaded and ready")
+        print("   📁 Files saved to /tmp for CircleCI artifacts")
         print("   ⚠️  Manual steps required (see above)")
         print("=" * 60)
         

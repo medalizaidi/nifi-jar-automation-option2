@@ -196,11 +196,8 @@ jobs:
             export BACKUP_TIME="<< parameters.backup-time >>"
             python scripts/rollback_nifi.py
       - store_artifacts:
-          path: /tmp/nifi-rollback-*.json
-          destination: rollback-backup-file
-      - store_artifacts:
-          path: /tmp/rollback-metadata.json
-          destination: rollback-metadata
+          path: /tmp
+          destination: rollback-files
       - run:
           name: Rollback completion summary
           when: on_success
