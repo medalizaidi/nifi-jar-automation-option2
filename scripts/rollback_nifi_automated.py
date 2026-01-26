@@ -203,7 +203,278 @@ def delete_all_components(token, process_group_id):
     return deleted_count
 
 
+def import_process_group_recursively(token, parent_pg_id, pg_data):
+    """Recursively import a process group and all its contents"""
+    
+    # Create the process group
+    import_url = f"{NIFI_HOST}/nifi-api/process-groups/{parent_pg_id}/process-groups"
+    headers = {
+        'Authorization': f'Bearer {token}',
+        'Content-Type': 'application/json'
+    }
+    
+    # Get component data
+    component = pg_data.get('component', pg_data)
+    
+    payload = {
+        'revision': {'version': 0},
+        'component': {
+            'name': component.get('name', 'Imported Process Group'),
+            'position': component.get('position', {'x': 0, 'y': 0})
+        }
+    }
+    
+    response = requests.post(import_url, headers=headers, json=payload, verify=False, timeout=60)
+    
+    if response.status_code not in [200, 201]:
+        print(f"     ⚠️  Warning: Could not create process group '{component.get('name')}': {response.status_code}")
+        return 0
+    
+    result = response.json()
+    new_pg_id = result['id']
+    print(f"     ✅ Created process group: {component.get('name')} (ID: {new_pg_id[:8]}...)")
+    
+    imported = 1
+    
+    # Now import contents of this process group
+    contents = pg_data.get('contents', component.get('contents', {}))
+    
+    if not contents:
+        print(f"        ℹ️  Process group is empty")
+        return imported
+    
+    # Import processors in this group
+    for processor in contents.get('processors', []):
+        try:
+            proc_url = f"{NIFI_HOST}/nifi-api/process-groups/{new_pg_id}/processors"
+            proc_component = processor.get('component', processor)
+            
+            proc_payload = {
+                'revision': {'version': 0},
+                'component': proc_component
+            }
+            
+            proc_response = requests.post(proc_url, headers=headers, json=proc_payload, verify=False, timeout=60)
+            if proc_response.status_code in [200, 201]:
+                imported += 1
+                print(f"        ✅ Imported processor: {proc_component.get('name', 'Unknown')}")
+            else:
+                print(f"        ⚠️  Warning: Could not import processor '{proc_component.get('name')}': {proc_response.status_code}")
+                print(f"           Response: {proc_response.text[:200]}")
+        except Exception as e:
+            print(f"        ⚠️  Error importing processor: {e}")
+    
+    # Import connections in this group
+    for connection in contents.get('connections', []):
+        try:
+            conn_url = f"{NIFI_HOST}/nifi-api/process-groups/{new_pg_id}/connections"
+            conn_component = connection.get('component', connection)
+            
+            conn_payload = {
+                'revision': {'version': 0},
+                'component': conn_component
+            }
+            
+            conn_response = requests.post(conn_url, headers=headers, json=conn_payload, verify=False, timeout=60)
+            if conn_response.status_code in [200, 201]:
+                imported += 1
+                print(f"        ✅ Imported connection")
+            else:
+                print(f"        ⚠️  Warning: Could not import connection: {conn_response.status_code}")
+        except Exception as e:
+            print(f"        ⚠️  Error importing connection: {e}")
+    
+    # Import input ports
+    for port in contents.get('inputPorts', []):
+        try:
+            port_url = f"{NIFI_HOST}/nifi-api/process-groups/{new_pg_id}/input-ports"
+            port_component = port.get('component', port)
+            
+            port_payload = {
+                'revision': {'version': 0},
+                'component': port_component
+            }
+            
+            port_response = requests.post(port_url, headers=headers, json=port_payload, verify=False, timeout=60)
+            if port_response.status_code in [200, 201]:
+                imported += 1
+                print(f"        ✅ Imported input port: {port_component.get('name', 'Unknown')}")
+            else:
+                print(f"        ⚠️  Warning: Could not import input port: {port_response.status_code}")
+        except Exception as e:
+            print(f"        ⚠️  Error importing input port: {e}")
+    
+    # Import output ports
+    for port in contents.get('outputPorts', []):
+        try:
+            port_url = f"{NIFI_HOST}/nifi-api/process-groups/{new_pg_id}/output-ports"
+            port_component = port.get('component', port)
+            
+            port_payload = {
+                'revision': {'version': 0},
+                'component': port_component
+            }
+            
+            port_response = requests.post(port_url, headers=headers, json=port_payload, verify=False, timeout=60)
+            if port_response.status_code in [200, 201]:
+                imported += 1
+                print(f"        ✅ Imported output port: {port_component.get('name', 'Unknown')}")
+            else:
+                print(f"        ⚠️  Warning: Could not import output port: {port_response.status_code}")
+        except Exception as e:
+            print(f"        ⚠️  Error importing output port: {e}")
+    
+    # Import funnels
+    for funnel in contents.get('funnels', []):
+        try:
+            funnel_url = f"{NIFI_HOST}/nifi-api/process-groups/{new_pg_id}/funnels"
+            funnel_component = funnel.get('component', funnel)
+            
+            funnel_payload = {
+                'revision': {'version': 0},
+                'component': funnel_component
+            }
+            
+            funnel_response = requests.post(funnel_url, headers=headers, json=funnel_payload, verify=False, timeout=60)
+            if funnel_response.status_code in [200, 201]:
+                imported += 1
+                print(f"        ✅ Imported funnel")
+            else:
+                print(f"        ⚠️  Warning: Could not import funnel: {funnel_response.status_code}")
+        except Exception as e:
+            print(f"        ⚠️  Error importing funnel: {e}")
+    
+    # Recursively import child process groups
+    for child_pg in contents.get('processGroups', []):
+        try:
+            child_imported = import_process_group_recursively(token, new_pg_id, child_pg)
+            imported += child_imported
+        except Exception as e:
+            print(f"        ⚠️  Error importing child process group: {e}")
+    
+    return imported
+
+
 def upload_flow_to_nifi(token, process_group_id, flow_json):
+    """Upload flow snapshot to NiFi by importing all components"""
+    
+    # Parse the flow JSON
+    try:
+        flow_data = json.loads(flow_json)
+    except json.JSONDecodeError as e:
+        raise Exception(f"Invalid flow JSON: {e}")
+    
+    print("  📤 Uploading flow to NiFi...")
+    
+    headers = {
+        'Authorization': f'Bearer {token}',
+        'Content-Type': 'application/json'
+    }
+    
+    # Extract components from the flow
+    flow_contents = flow_data.get('flowContents', flow_data)
+    
+    # Import each component type
+    imported = 0
+    
+    # Import process groups (recursively with their contents)
+    print("  📥 Importing process groups and their contents...")
+    for pg in flow_contents.get('processGroups', []):
+        try:
+            pg_imported = import_process_group_recursively(token, process_group_id, pg)
+            imported += pg_imported
+        except Exception as e:
+            print(f"     ⚠️  Error importing process group: {e}")
+    
+    # Import root-level processors
+    print("  📥 Importing root-level processors...")
+    for processor in flow_contents.get('processors', []):
+        try:
+            import_url = f"{NIFI_HOST}/nifi-api/process-groups/{process_group_id}/processors"
+            proc_component = processor.get('component', processor)
+            
+            payload = {
+                'revision': {'version': 0},
+                'component': proc_component
+            }
+            
+            response = requests.post(import_url, headers=headers, json=payload, verify=False, timeout=60)
+            if response.status_code in [200, 201]:
+                imported += 1
+                print(f"     ✅ Imported processor: {proc_component.get('name', 'Unknown')}")
+            else:
+                print(f"     ⚠️  Warning: Could not import processor: {response.status_code}")
+                print(f"        Response: {response.text[:200]}")
+        except Exception as e:
+            print(f"     ⚠️  Error importing processor: {e}")
+    
+    # Import root-level connections
+    print("  📥 Importing root-level connections...")
+    for connection in flow_contents.get('connections', []):
+        try:
+            import_url = f"{NIFI_HOST}/nifi-api/process-groups/{process_group_id}/connections"
+            conn_component = connection.get('component', connection)
+            
+            payload = {
+                'revision': {'version': 0},
+                'component': conn_component
+            }
+            
+            response = requests.post(import_url, headers=headers, json=payload, verify=False, timeout=60)
+            if response.status_code in [200, 201]:
+                imported += 1
+                print(f"     ✅ Imported connection")
+            else:
+                print(f"     ⚠️  Warning: Could not import connection: {response.status_code}")
+        except Exception as e:
+            print(f"     ⚠️  Error importing connection: {e}")
+    
+    # Import root-level ports
+    print("  📥 Importing root-level ports...")
+    for port in flow_contents.get('inputPorts', []):
+        try:
+            import_url = f"{NIFI_HOST}/nifi-api/process-groups/{process_group_id}/input-ports"
+            port_component = port.get('component', port)
+            
+            payload = {
+                'revision': {'version': 0},
+                'component': port_component
+            }
+            
+            response = requests.post(import_url, headers=headers, json=payload, verify=False, timeout=60)
+            if response.status_code in [200, 201]:
+                imported += 1
+                print(f"     ✅ Imported input port: {port_component.get('name', 'Unknown')}")
+            else:
+                print(f"     ⚠️  Warning: Could not import input port: {response.status_code}")
+        except Exception as e:
+            print(f"     ⚠️  Error importing input port: {e}")
+    
+    for port in flow_contents.get('outputPorts', []):
+        try:
+            import_url = f"{NIFI_HOST}/nifi-api/process-groups/{process_group_id}/output-ports"
+            port_component = port.get('component', port)
+            
+            payload = {
+                'revision': {'version': 0},
+                'component': port_component
+            }
+            
+            response = requests.post(import_url, headers=headers, json=payload, verify=False, timeout=60)
+            if response.status_code in [200, 201]:
+                imported += 1
+                print(f"     ✅ Imported output port: {port_component.get('name', 'Unknown')}")
+            else:
+                print(f"     ⚠️  Warning: Could not import output port: {response.status_code}")
+        except Exception as e:
+            print(f"     ⚠️  Error importing output port: {e}")
+    
+    print(f"  ✅ Total imported: {imported} component(s)")
+    
+    if imported == 0:
+        print("  ℹ️  Note: Backup appears to be empty (no components to import)")
+    
+    return {'imported': imported}
     """Upload flow snapshot to NiFi by replacing the process group content"""
     
     # Parse the flow JSON
