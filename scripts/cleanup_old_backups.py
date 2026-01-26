@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from github import Github
 
 GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN')
-GITHUB_REPO = os.environ.get('GITHUB_REPO', 'avaxops/nifi-jar-automation-option2')
+GITHUB_REPO = os.environ.get('GITHUB_REPO', 'medalizaidi/nifi-jar-automation-option2')
 BACKUP_BRANCH = os.environ.get('BACKUP_BRANCH', 'main')
 BACKUP_FOLDER = os.environ.get('BACKUP_FOLDER', 'nifi-backups')
 RETENTION_DAYS = int(os.environ.get('RETENTION_DAYS', '15'))
