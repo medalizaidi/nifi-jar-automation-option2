@@ -75,17 +75,15 @@ workflows:
             - github-context
 
 
-  manual-test-backup:
+  manual-test-cleanup:
     jobs:
-      - hold-for-approval:
+      - hold-for-cleanup-approval:
           type: approval
-      - nifi-backup:
+      - cleanup-old-backups:
           requires:
-            - hold-for-approval
+            - hold-for-cleanup-approval
           context:
-            - nifi-context
             - github-context
-
 
   # ===========================================
   # NiFi Backup - Scheduled twice daily
