@@ -28,7 +28,7 @@ NIFI_HOST = os.environ.get('NIFI_HOST')
 NIFI_USERNAME = os.environ.get('NIFI_USERNAME')
 NIFI_PASSWORD = os.environ.get('NIFI_PASSWORD')
 GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN')
-GITHUB_REPO = os.environ.get('GITHUB_REPO', 'avaxops/nifi-jar-automation-option2')
+GITHUB_REPO = os.environ.get('GITHUB_REPO', 'medalizadi/nifi-jar-automation-option2')
 BACKUP_BRANCH = os.environ.get('BACKUP_BRANCH', 'main')
 BACKUP_FOLDER = os.environ.get('BACKUP_FOLDER', 'nifi-backups')
 
