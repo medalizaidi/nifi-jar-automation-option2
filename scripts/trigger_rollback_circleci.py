@@ -15,7 +15,7 @@ from datetime import datetime
 
 # Configuration
 CIRCLECI_TOKEN = os.environ.get('CIRCLECI_TOKEN')
-REPO_OWNER = os.environ.get('REPO_OWNER', 'medalizadi')
+REPO_OWNER = os.environ.get('REPO_OWNER', 'medalizaidi')
 REPO_NAME = os.environ.get('REPO_NAME', 'nifi-jar-automation-option2')
 BRANCH = os.environ.get('BRANCH', 'main')
 
