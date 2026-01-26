@@ -166,8 +166,20 @@ def download_backup(repo, backup_path):
         metadata_content = metadata_file.decoded_content
         metadata = json.loads(metadata_content)
         
-        # Decompress flow
-        flow_json = gzip.decompress(flow_content)
+        # Try to decompress flow - handle both gzipped and plain JSON
+        try:
+            flow_json = gzip.decompress(flow_content)
+            print(f"  ℹ️  File was gzip compressed")
+        except gzip.BadGzipFile:
+            # File is not gzipped, use as-is
+            flow_json = flow_content
+            print(f"  ℹ️  File is plain JSON (not compressed)")
+        
+        # Validate it's valid JSON
+        try:
+            json.loads(flow_json)
+        except json.JSONDecodeError as e:
+            raise Exception(f"Downloaded file is not valid JSON: {e}")
         
         return flow_json, metadata
     except Exception as e:
@@ -216,12 +228,58 @@ def main():
     print("")
     
     try:
-        # Step 1: Connect to GitHub
+        # Step 1: Connect to GitHub with modern authentication
         print("Step 1: Connecting to GitHub...")
         auth = Auth.Token(GITHUB_TOKEN)
         g = Github(auth=auth)
-        repo = g.get_repo(GITHUB_REPO)
-        print("  ✅ Connected successfully")
+        
+        # Verify authentication and repository access
+        try:
+            repo = g.get_repo(GITHUB_REPO)
+            print("  ✅ Connected successfully")
+        except Exception as e:
+            print(f"  ❌ Failed to access repository: {GITHUB_REPO}")
+            print(f"  Error: {e}")
+            print("")
+            print("=" * 60)
+            print("TROUBLESHOOTING GITHUB 404 ERROR")
+            print("=" * 60)
+            print("")
+            print("Possible causes:")
+            print("  1. Repository format is incorrect")
+            print("  2. GitHub token doesn't have access")
+            print("  3. Repository is private and token lacks permissions")
+            print("  4. Token has expired or been revoked")
+            print("")
+            print("Current configuration:")
+            print(f"  GITHUB_REPO: {GITHUB_REPO}")
+            print(f"  Expected format: owner/repo-name")
+            print("")
+            print("✅ CORRECT format examples:")
+            print("  - medalizadi/nifi-backups")
+            print("  - avaxops/nifi-jar-automation-option2")
+            print("")
+            print("❌ WRONG format examples:")
+            print("  - github.com/medalizadi/repo (includes github.com)")
+            print("  - https://github.com/medalizadi/repo (includes https://)")
+            print("  - medalizadi/repo.git (includes .git)")
+            print("  - repo-name (missing owner)")
+            print("")
+            print("How to fix:")
+            print("  1. Check GITHUB_REPO in CircleCI context")
+            print("     Go to: Organization Settings → Contexts → github-context")
+            print("")
+            print("  2. Verify GitHub token has 'repo' scope")
+            print("     Go to: https://github.com/settings/tokens")
+            print("     Token needs 'repo' or 'contents:read' permission")
+            print("")
+            print("  3. Test token access:")
+            print("     curl -H \"Authorization: token YOUR_TOKEN\" \\")
+            print(f"       https://api.github.com/repos/{GITHUB_REPO}")
+            print("")
+            print("=" * 60)
+            g.close()
+            sys.exit(1)
         
         # Step 2: List available backups if no date specified
         if not BACKUP_DATE:
