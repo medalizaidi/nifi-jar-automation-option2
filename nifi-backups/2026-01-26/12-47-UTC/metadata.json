@@ -1,0 +1,16 @@
+{
+  "backup_timestamp": "2026-01-26T12:47:01.894874Z",
+  "backup_date": "2026-01-26",
+  "backup_time": "12-47-UTC",
+  "nifi_host": "https://nifi-new.avaxiagroup.org",
+  "root_process_group_id": "e062db1b-019b-1000-33f7-a0beed604b55",
+  "statistics": {
+    "process_groups": 1,
+    "processors": 0,
+    "connections": 0,
+    "input_ports": 0,
+    "output_ports": 0,
+    "funnels": 0,
+    "labels": 0
+  }
+}
