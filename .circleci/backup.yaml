@@ -74,6 +74,19 @@ workflows:
             - nifi-context
             - github-context
 
+
+  manual-test-backup:
+    jobs:
+      - hold-for-approval:
+          type: approval
+      - nifi-backup:
+          requires:
+            - hold-for-approval
+          context:
+            - nifi-context
+            - github-context
+
+
   # ===========================================
   # NiFi Backup - Scheduled twice daily
   # ===========================================
