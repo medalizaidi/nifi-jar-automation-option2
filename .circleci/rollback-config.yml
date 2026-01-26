@@ -1,0 +1,273 @@
+version: 2.1
+# ===========================================
+# NiFi Rollback Pipeline
+# Separate pipeline for restoring NiFi from backups
+# Trigger manually via CircleCI UI with date/time parameters
+# ===========================================
+
+# ===========================================
+# PIPELINE PARAMETERS
+# ===========================================
+parameters:
+  backup-date:
+    type: string
+    default: ""
+    description: "Backup date to restore (format: YYYY-MM-DD, e.g., 2026-01-26)"
+  
+  backup-time:
+    type: string
+    default: ""
+    description: "Backup time to restore (format: HH-MM-UTC, e.g., 12-00-UTC)"
+
+# ===========================================
+# EXECUTORS
+# ===========================================
+executors:
+  python-executor:
+    docker:
+      - image: cimg/python:3.11
+    resource_class: small
+
+# ===========================================
+# JOBS
+# ===========================================
+jobs:
+  list-available-backups:
+    executor: python-executor
+    steps:
+      - checkout
+      - run:
+          name: Display information
+          command: |
+            echo "========================================"
+            echo "    LIST AVAILABLE BACKUPS"
+            echo "========================================"
+            echo ""
+            echo "This job will list all available backups"
+            echo "from GitHub."
+            echo ""
+            echo "To perform a rollback, trigger this pipeline"
+            echo "again with both parameters:"
+            echo "  - backup-date (YYYY-MM-DD)"
+            echo "  - backup-time (HH-MM-UTC)"
+            echo "========================================"
+      - run:
+          name: Install dependencies
+          command: pip install PyGithub
+      - run:
+          name: List all backups
+          command: python scripts/rollback_nifi.py --list-only
+
+  validate-parameters:
+    executor: python-executor
+    parameters:
+      backup-date:
+        type: string
+      backup-time:
+        type: string
+    steps:
+      - run:
+          name: Validate rollback parameters
+          command: |
+            echo "========================================"
+            echo "    VALIDATING PARAMETERS"
+            echo "========================================"
+            echo ""
+            
+            BACKUP_DATE="<< parameters.backup-date >>"
+            BACKUP_TIME="<< parameters.backup-time >>"
+            
+            echo "Backup Date: $BACKUP_DATE"
+            echo "Backup Time: $BACKUP_TIME"
+            echo ""
+            
+            # Validate date format (YYYY-MM-DD)
+            if ! echo "$BACKUP_DATE" | grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'; then
+              echo "❌ Invalid date format: $BACKUP_DATE"
+              echo "   Expected format: YYYY-MM-DD (e.g., 2026-01-26)"
+              exit 1
+            fi
+            
+            # Validate time format (HH-MM-UTC)
+            if ! echo "$BACKUP_TIME" | grep -qE '^[0-9]{2}-[0-9]{2}-UTC$'; then
+              echo "❌ Invalid time format: $BACKUP_TIME"
+              echo "   Expected format: HH-MM-UTC (e.g., 12-00-UTC)"
+              exit 1
+            fi
+            
+            echo "✅ Parameters are valid"
+            echo "========================================"
+
+  nifi-rollback:
+    executor: python-executor
+    parameters:
+      backup-date:
+        type: string
+      backup-time:
+        type: string
+    steps:
+      - checkout
+      - run:
+          name: Display rollback information
+          command: |
+            echo "========================================"
+            echo "       NIFI ROLLBACK EXECUTION"
+            echo "========================================"
+            echo ""
+            echo "📅 Backup Date: << parameters.backup-date >>"
+            echo "🕐 Backup Time: << parameters.backup-time >>"
+            echo ""
+            echo "🔗 NiFi Host: ${NIFI_HOST}"
+            echo "📦 GitHub Repo: ${GITHUB_REPO}"
+            echo "🌿 Branch: ${BACKUP_BRANCH:-main}"
+            echo "📁 Backup Folder: ${BACKUP_FOLDER:-nifi-backups}"
+            echo ""
+            echo "⚠️  This operation will download and prepare"
+            echo "   the backup for restoration."
+            echo ""
+            echo "========================================"
+      - run:
+          name: Verify required environment variables
+          command: |
+            echo "Checking required environment variables..."
+            echo ""
+            
+            MISSING=""
+            
+            # Check NiFi variables
+            if [ -z "${NIFI_HOST}" ]; then
+              echo "❌ NIFI_HOST is not set"
+              MISSING="yes"
+            else
+              echo "✅ NIFI_HOST is set: ${NIFI_HOST}"
+            fi
+            
+            if [ -z "${NIFI_USERNAME}" ]; then
+              echo "❌ NIFI_USERNAME is not set"
+              MISSING="yes"
+            else
+              echo "✅ NIFI_USERNAME is set"
+            fi
+            
+            if [ -z "${NIFI_PASSWORD}" ]; then
+              echo "❌ NIFI_PASSWORD is not set"
+              MISSING="yes"
+            else
+              echo "✅ NIFI_PASSWORD is set (hidden)"
+            fi
+            
+            # Check GitHub variables
+            if [ -z "${GITHUB_TOKEN}" ]; then
+              echo "❌ GITHUB_TOKEN is not set"
+              MISSING="yes"
+            else
+              echo "✅ GITHUB_TOKEN is set (length: ${#GITHUB_TOKEN})"
+            fi
+            
+            if [ -z "${GITHUB_REPO}" ]; then
+              echo "❌ GITHUB_REPO is not set"
+              MISSING="yes"
+            else
+              echo "✅ GITHUB_REPO is set: ${GITHUB_REPO}"
+            fi
+            
+            echo ""
+            
+            if [ -n "$MISSING" ]; then
+              echo "❌ Missing required environment variables"
+              echo ""
+              echo "Please ensure the following contexts are configured:"
+              echo "  - nifi-context (NIFI_HOST, NIFI_USERNAME, NIFI_PASSWORD)"
+              echo "  - github-context (GITHUB_TOKEN, GITHUB_REPO)"
+              exit 1
+            fi
+            
+            echo "✅ All required environment variables are set"
+      - run:
+          name: Install Python dependencies
+          command: |
+            echo "Installing dependencies..."
+            pip install PyGithub requests
+            echo "✅ Dependencies installed"
+      - run:
+          name: Execute NiFi rollback
+          command: |
+            export BACKUP_DATE="<< parameters.backup-date >>"
+            export BACKUP_TIME="<< parameters.backup-time >>"
+            python scripts/rollback_nifi.py
+      - store_artifacts:
+          path: /tmp/nifi-rollback-*.json
+          destination: rollback-backup-file
+      - store_artifacts:
+          path: /tmp/rollback-metadata.json
+          destination: rollback-metadata
+      - run:
+          name: Rollback completion summary
+          when: on_success
+          command: |
+            echo ""
+            echo "========================================"
+            echo "   ROLLBACK PREPARATION COMPLETED"
+            echo "========================================"
+            echo ""
+            echo "✅ Backup downloaded successfully"
+            echo "✅ Files saved to CircleCI artifacts"
+            echo ""
+            echo "📥 Download the backup file from the"
+            echo "   'Artifacts' tab above"
+            echo ""
+            echo "⚠️  Manual steps required to complete"
+            echo "   the rollback. See job logs above for"
+            echo "   detailed instructions."
+            echo ""
+            echo "========================================"
+
+# ===========================================
+# WORKFLOWS
+# ===========================================
+workflows:
+  version: 2
+
+  # ===========================================
+  # List Backups Workflow
+  # Runs when NO parameters are provided
+  # ===========================================
+  list-backups:
+    when:
+      and:
+        - equal: [ "", << pipeline.parameters.backup-date >> ]
+        - equal: [ "", << pipeline.parameters.backup-time >> ]
+    jobs:
+      - list-available-backups:
+          context:
+            - github-context
+
+  # ===========================================
+  # Execute Rollback Workflow
+  # Runs when date parameter is provided
+  # Requires manual approval before execution
+  # ===========================================
+  execute-rollback:
+    when: << pipeline.parameters.backup-date >>
+    jobs:
+      - validate-parameters:
+          backup-date: << pipeline.parameters.backup-date >>
+          backup-time: << pipeline.parameters.backup-time >>
+      
+      - hold-for-rollback-approval:
+          type: approval
+          requires:
+            - validate-parameters
+          filters:
+            branches:
+              only:
+                - main
+      
+      - nifi-rollback:
+          requires:
+            - hold-for-rollback-approval
+          backup-date: << pipeline.parameters.backup-date >>
+          backup-time: << pipeline.parameters.backup-time >>
+          context:
+            - nifi-context
+            - github-context
