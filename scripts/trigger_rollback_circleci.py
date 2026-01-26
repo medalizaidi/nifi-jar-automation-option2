@@ -205,7 +205,186 @@ def list_backups():
     return False
 
 
-def rollback_to_backup(backup_date, backup_time):
+def rollback_to_backup(backup_date, backup_time, automated=False):
+    """
+    Trigger rollback to specific backup
+    
+    Args:
+        backup_date (str): Backup date in YYYY-MM-DD format
+        backup_time (str): Backup time in HH-MM-UTC format
+        automated (bool): If True, uploads directly to NiFi
+    """
+    print_header("NiFi Rollback Execution")
+    
+    # Validate date format
+    if not validate_date_format(backup_date):
+        print_error(f"Invalid date format: {backup_date}")
+        print()
+        print("Expected format: YYYY-MM-DD")
+        print("Examples:")
+        print("  ✅ 2026-01-26")
+        print("  ✅ 2025-12-31")
+        print("  ❌ 26-01-2026 (wrong order)")
+        print("  ❌ 2026/01/26 (wrong separator)")
+        return False
+    
+    # Validate time format
+    if not validate_time_format(backup_time):
+        print_error(f"Invalid time format: {backup_time}")
+        print()
+        print("Expected format: HH-MM-UTC")
+        print("Examples:")
+        print("  ✅ 12-00-UTC")
+        print("  ✅ 00-00-UTC")
+        print("  ✅ 23-59-UTC")
+        print("  ❌ 12-00 (missing -UTC)")
+        print("  ❌ 12:00-UTC (wrong separator)")
+        return False
+    
+    # Show rollback details
+    print(f"{Colors.MAGENTA}{Colors.BOLD}Rollback Configuration:{Colors.NC}")
+    print(f"  📅 Backup Date: {Colors.BOLD}{backup_date}{Colors.NC}")
+    print(f"  🕐 Backup Time: {Colors.BOLD}{backup_time}{Colors.NC}")
+    print(f"  🔗 Repository: {REPO_OWNER}/{REPO_NAME}")
+    print(f"  🌿 Branch: {BRANCH}")
+    print(f"  🤖 Automated: {Colors.BOLD}{'YES - Direct upload to NiFi' if automated else 'NO - Manual completion required'}{Colors.NC}")
+    print()
+    
+    # Warning
+    if automated:
+        print_warning("This will initiate an AUTOMATED ROLLBACK")
+        print()
+        print(f"{Colors.RED}{Colors.BOLD}DANGER: This is DESTRUCTIVE!{Colors.NC}")
+        print()
+        print(f"{Colors.YELLOW}What will happen:{Colors.NC}")
+        print("  1. Pipeline triggered with automated=true")
+        print("  2. Parameters validated")
+        print("  3. You MUST APPROVE in CircleCI UI")
+        print("  4. All NiFi processors will be STOPPED")
+        print("  5. ALL existing components will be DELETED")
+        print("  6. Backup will be uploaded to NiFi")
+        print("  7. You must START processors manually")
+        print()
+        print(f"{Colors.RED}This CANNOT be undone!{Colors.NC}")
+    else:
+        print_warning("This will initiate a ROLLBACK operation")
+        print()
+        print(f"{Colors.YELLOW}What will happen:{Colors.NC}")
+        print("  1. Pipeline will be triggered")
+        print("  2. Parameters validated")
+        print("  3. You'll APPROVE in CircleCI UI")
+        print("  4. Backup downloaded from GitHub")
+        print("  5. Files saved to CircleCI artifacts")
+        print("  6. You complete rollback in NiFi UI manually")
+    
+    print()
+    
+    # Confirmation
+    try:
+        if automated:
+            confirm = input(f"{Colors.RED}{Colors.BOLD}Type 'AUTOMATED ROLLBACK' to proceed: {Colors.NC}")
+            if confirm != "AUTOMATED ROLLBACK":
+                print()
+                print_warning("Rollback cancelled by user")
+                return False
+        else:
+            confirm = input(f"{Colors.YELLOW}{Colors.BOLD}Are you sure you want to proceed? (yes/no): {Colors.NC}")
+            if confirm.lower() != 'yes':
+                print()
+                print_warning("Rollback cancelled by user")
+                return False
+    except (KeyboardInterrupt, EOFError):
+        print()
+        print_warning("Rollback cancelled by user")
+        return False
+    
+    print()
+    print_info("Triggering CircleCI rollback pipeline...")
+    print()
+    
+    # Trigger with parameters
+    parameters = {
+        "backup-date": backup_date,
+        "backup-time": backup_time,
+        "automated": automated
+    }
+    
+    result = trigger_circleci_pipeline(parameters)
+    
+    if result:
+        pipeline_id = result.get('id')
+        pipeline_number = result.get('number')
+        
+        print_success("Rollback pipeline triggered successfully!")
+        print()
+        print(f"{Colors.BOLD}Pipeline Details:{Colors.NC}")
+        print(f"  📊 Number: {pipeline_number}")
+        print(f"  🆔 ID: {pipeline_id}")
+        print(f"  📅 Date: {backup_date}")
+        print(f"  🕐 Time: {backup_time}")
+        print(f"  🤖 Mode: {'AUTOMATED' if automated else 'MANUAL'}")
+        print()
+        
+        pipeline_url = f"https://app.circleci.com/pipelines/github/{REPO_OWNER}/{REPO_NAME}/{pipeline_number}"
+        print(f"{Colors.BOLD}View Pipeline:{Colors.NC}")
+        print(f"  {Colors.BLUE}{pipeline_url}{Colors.NC}")
+        print()
+        
+        if automated:
+            print(f"{Colors.CYAN}{'─' * 70}{Colors.NC}")
+            print(f"{Colors.CYAN}{Colors.BOLD}AUTOMATED ROLLBACK - Action Required:{Colors.NC}")
+            print(f"{Colors.CYAN}{'─' * 70}{Colors.NC}")
+            print()
+            print(f"{Colors.BOLD}Step 1: Open Pipeline{Colors.NC}")
+            print(f"  Click the URL above")
+            print()
+            print(f"{Colors.BOLD}Step 2: Approve (CRITICAL){Colors.NC}")
+            print(f"  1. Find 'automated-rollback' workflow")
+            print(f"  2. Click 'hold-for-automated-rollback'")
+            print(f"  3. {Colors.RED}{Colors.BOLD}REVIEW CAREFULLY - THIS IS DESTRUCTIVE!{Colors.NC}")
+            print(f"  4. Click {Colors.GREEN}[Approve]{Colors.NC} only if you're certain")
+            print()
+            print(f"{Colors.BOLD}Step 3: Monitor Execution{Colors.NC}")
+            print(f"  Watch the job logs as it:")
+            print(f"  - Stops all processors")
+            print(f"  - Deletes all components")
+            print(f"  - Uploads the backup")
+            print()
+            print(f"{Colors.BOLD}Step 4: Start Processors{Colors.NC}")
+            print(f"  After completion:")
+            print(f"  - Go to NiFi UI")
+            print(f"  - Verify flow is correct")
+            print(f"  - Start processors manually")
+            print(f"  - Monitor for issues")
+            print()
+            print(f"{Colors.CYAN}{'─' * 70}{Colors.NC}")
+        else:
+            print(f"{Colors.CYAN}{'─' * 70}{Colors.NC}")
+            print(f"{Colors.CYAN}{Colors.BOLD}MANUAL ROLLBACK - Action Required:{Colors.NC}")
+            print(f"{Colors.CYAN}{'─' * 70}{Colors.NC}")
+            print()
+            print(f"{Colors.BOLD}Step 1: Approve in CircleCI{Colors.NC}")
+            print(f"  1. Find 'manual-rollback' workflow")
+            print(f"  2. Click 'hold-for-rollback-approval'")
+            print(f"  3. Click {Colors.GREEN}[Approve]{Colors.NC}")
+            print()
+            print(f"{Colors.BOLD}Step 2: Download Backup{Colors.NC}")
+            print(f"  1. Wait for job to complete")
+            print(f"  2. Go to 'Artifacts' tab")
+            print(f"  3. Download the backup file")
+            print()
+            print(f"{Colors.BOLD}Step 3: Upload to NiFi UI{Colors.NC}")
+            print(f"  1. Stop processors in NiFi")
+            print(f"  2. Upload downloaded file")
+            print(f"  3. Review and apply changes")
+            print(f"  4. Start processors")
+            print()
+            print(f"{Colors.CYAN}{'─' * 70}{Colors.NC}")
+        
+        print()
+        return True
+    
+    return False
     """
     Trigger rollback to specific backup
     
@@ -411,6 +590,12 @@ Environment Variables:
     )
     
     parser.add_argument(
+        '--automated',
+        action='store_true',
+        help='Automated rollback (uploads directly to NiFi - DANGEROUS!)'
+    )
+    
+    parser.add_argument(
         '--repo-owner',
         type=str,
         help='GitHub repository owner (overrides REPO_OWNER env var)'
@@ -449,12 +634,13 @@ Environment Variables:
     if args.list:
         success = list_backups()
     elif args.date and args.time:
-        success = rollback_to_backup(args.date, args.time)
+        success = rollback_to_backup(args.date, args.time, args.automated)
     elif args.date or args.time:
         print_error("Both --date and --time are required for rollback")
         print()
         print("Usage:")
         print("  python trigger_rollback_circleci.py --date YYYY-MM-DD --time HH-MM-UTC")
+        print("  python trigger_rollback_circleci.py --date YYYY-MM-DD --time HH-MM-UTC --automated")
         print()
         print("Or to list available backups:")
         print("  python trigger_rollback_circleci.py --list")
