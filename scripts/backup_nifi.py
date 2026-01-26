@@ -1,35 +1,33 @@
 #!/usr/bin/env python3
 """
-NiFi Backup Script
-Backs up NiFi flow definitions and commits to GitHub
-Structure: nifi-backups/YYYY-MM-DD/HH-MM-UTC/
+NiFi Backup Script - FIXED VERSION
+Properly counts processors inside process groups
 """
 
 import os
 import sys
 import json
+import gzip
 import requests
 from datetime import datetime
-from github import Github
+from github import Github, Auth
 
-# Disable SSL warnings for self-signed certs
+# Disable SSL warnings
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# ===========================================
-# Configuration from Environment Variables
-# ===========================================
+# Configuration
 NIFI_HOST = os.environ.get('NIFI_HOST')
 NIFI_USERNAME = os.environ.get('NIFI_USERNAME')
 NIFI_PASSWORD = os.environ.get('NIFI_PASSWORD')
 GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN')
-GITHUB_REPO = os.environ.get('GITHUB_REPO', 'medalizaidi/nifi-jar-automation-option2')
+GITHUB_REPO = os.environ.get('GITHUB_REPO')
 BACKUP_BRANCH = os.environ.get('BACKUP_BRANCH', 'main')
 BACKUP_FOLDER = os.environ.get('BACKUP_FOLDER', 'nifi-backups')
 
 
 def get_nifi_token():
-    """Authenticate with NiFi and get access token"""
+    """Authenticate with NiFi"""
     url = f"{NIFI_HOST}/nifi-api/access/token"
     response = requests.post(
         url,
@@ -42,7 +40,7 @@ def get_nifi_token():
 
 
 def get_root_process_group_id(token):
-    """Get the root process group ID"""
+    """Get root process group ID"""
     url = f"{NIFI_HOST}/nifi-api/flow/process-groups/root"
     headers = {'Authorization': f'Bearer {token}'}
     response = requests.get(url, headers=headers, verify=False, timeout=30)
@@ -50,8 +48,8 @@ def get_root_process_group_id(token):
     return response.json()['processGroupFlow']['id']
 
 
-def export_flow(token, process_group_id):
-    """Export the entire flow as JSON"""
+def download_flow(token, process_group_id):
+    """Download flow from NiFi"""
     url = f"{NIFI_HOST}/nifi-api/process-groups/{process_group_id}/download"
     headers = {'Authorization': f'Bearer {token}'}
     response = requests.get(url, headers=headers, verify=False, timeout=120)
@@ -59,48 +57,56 @@ def export_flow(token, process_group_id):
     return response.content
 
 
-def get_flow_info(token, process_group_id):
-    """Get flow information for metadata"""
-    url = f"{NIFI_HOST}/nifi-api/flow/process-groups/{process_group_id}"
-    headers = {'Authorization': f'Bearer {token}'}
-    response = requests.get(url, headers=headers, verify=False, timeout=30)
-    response.raise_for_status()
-    return response.json()
-
-
-def commit_file_to_github(g, repo, file_path, content, commit_message):
-    """Commit a file to GitHub (create or update)"""
-    try:
-        # Check if file exists
-        existing = repo.get_contents(file_path, ref=BACKUP_BRANCH)
-        repo.update_file(
-            file_path,
-            commit_message,
-            content,
-            existing.sha,
-            branch=BACKUP_BRANCH
-        )
-        print(f"  ✅ Updated: {file_path}")
-    except Exception as e:
-        if "404" in str(e):
-            repo.create_file(
-                file_path,
-                commit_message,
-                content,
-                branch=BACKUP_BRANCH
-            )
-            print(f"  ✅ Created: {file_path}")
-        else:
-            raise e
+def count_components_recursive(flow_contents):
+    """Recursively count all components including nested ones"""
+    stats = {
+        'process_groups': 0,
+        'processors': 0,
+        'connections': 0,
+        'input_ports': 0,
+        'output_ports': 0,
+        'funnels': 0,
+        'labels': 0
+    }
+    
+    # Count at this level
+    stats['processors'] += len(flow_contents.get('processors', []))
+    stats['connections'] += len(flow_contents.get('connections', []))
+    stats['input_ports'] += len(flow_contents.get('inputPorts', []))
+    stats['output_ports'] += len(flow_contents.get('outputPorts', []))
+    stats['funnels'] += len(flow_contents.get('funnels', []))
+    stats['labels'] += len(flow_contents.get('labels', []))
+    
+    # Recursively count in child process groups
+    for pg in flow_contents.get('processGroups', []):
+        stats['process_groups'] += 1
+        
+        # Get contents of child process group
+        pg_contents = pg.get('contents', pg.get('component', {}).get('contents', {}))
+        
+        if pg_contents:
+            # Recursively count components in child
+            child_stats = count_components_recursive(pg_contents)
+            
+            # Add child stats to total (except process_groups, we already counted that)
+            stats['processors'] += child_stats['processors']
+            stats['connections'] += child_stats['connections']
+            stats['input_ports'] += child_stats['input_ports']
+            stats['output_ports'] += child_stats['output_ports']
+            stats['funnels'] += child_stats['funnels']
+            stats['labels'] += child_stats['labels']
+            stats['process_groups'] += child_stats['process_groups']
+    
+    return stats
 
 
 def main():
     print("=" * 60)
-    print("         NiFi Backup Script")
+    print("         NiFi Backup Script (FIXED)")
     print("=" * 60)
     print("")
     
-    # Validate required environment variables
+    # Validate environment variables
     required_vars = {
         'NIFI_HOST': NIFI_HOST,
         'NIFI_USERNAME': NIFI_USERNAME,
@@ -114,15 +120,6 @@ def main():
         print(f"❌ Missing environment variables: {', '.join(missing)}")
         sys.exit(1)
     
-    # Get current timestamp
-    now = datetime.utcnow()
-    date_folder = now.strftime('%Y-%m-%d')
-    time_folder = now.strftime('%H-%M-UTC')
-    backup_path = f"{BACKUP_FOLDER}/{date_folder}/{time_folder}"
-    
-    print(f"📅 Date: {date_folder}")
-    print(f"🕐 Time: {time_folder}")
-    print(f"📁 Backup Path: {backup_path}")
     print(f"🔗 NiFi Host: {NIFI_HOST}")
     print(f"📦 GitHub Repo: {GITHUB_REPO}")
     print("")
@@ -132,82 +129,134 @@ def main():
         print("Step 1: Authenticating with NiFi...")
         token = get_nifi_token()
         print("  ✅ Authentication successful")
+        print("")
         
         # Step 2: Get root process group
         print("Step 2: Getting root process group...")
         root_pg_id = get_root_process_group_id(token)
         print(f"  ✅ Root PG ID: {root_pg_id}")
+        print("")
         
-        # Step 3: Export the flow
-        print("Step 3: Exporting NiFi flow...")
-        flow_content = export_flow(token, root_pg_id)
-        print(f"  ✅ Flow exported ({len(flow_content):,} bytes)")
+        # Step 3: Download flow
+        print("Step 3: Downloading flow from NiFi...")
+        flow_data = download_flow(token, root_pg_id)
+        print(f"  ✅ Downloaded flow ({len(flow_data):,} bytes)")
+        print("")
         
-        # Step 4: Get flow metadata
-        print("Step 4: Getting flow metadata...")
-        flow_info = get_flow_info(token, root_pg_id)
+        # Step 4: Parse and analyze flow
+        print("Step 4: Analyzing flow structure...")
+        flow_json = json.loads(flow_data)
+        flow_contents = flow_json.get('flowContents', flow_json)
         
-        flow_data = flow_info.get('processGroupFlow', {}).get('flow', {})
+        # Use recursive counting
+        stats = count_components_recursive(flow_contents)
+        
+        print(f"  📊 Flow Statistics:")
+        print(f"     - Process Groups: {stats['process_groups']}")
+        print(f"     - Processors: {stats['processors']}")
+        print(f"     - Connections: {stats['connections']}")
+        print(f"     - Input Ports: {stats['input_ports']}")
+        print(f"     - Output Ports: {stats['output_ports']}")
+        print(f"     - Funnels: {stats['funnels']}")
+        print(f"     - Labels: {stats['labels']}")
+        print("")
+        
+        # Step 5: Prepare backup
+        print("Step 5: Preparing backup files...")
+        timestamp = datetime.utcnow()
+        backup_date = timestamp.strftime('%Y-%m-%d')
+        backup_time = timestamp.strftime('%H-%M') + '-UTC'
+        
+        # Create metadata
         metadata = {
-            'backup_timestamp': now.isoformat() + 'Z',
-            'backup_date': date_folder,
-            'backup_time': time_folder,
+            'backup_timestamp': timestamp.isoformat() + 'Z',
+            'backup_date': backup_date,
+            'backup_time': backup_time,
             'nifi_host': NIFI_HOST,
             'root_process_group_id': root_pg_id,
-            'statistics': {
-                'process_groups': len(flow_data.get('processGroups', [])),
-                'processors': len(flow_data.get('processors', [])),
-                'connections': len(flow_data.get('connections', [])),
-                'input_ports': len(flow_data.get('inputPorts', [])),
-                'output_ports': len(flow_data.get('outputPorts', [])),
-                'funnels': len(flow_data.get('funnels', [])),
-                'labels': len(flow_data.get('labels', []))
-            }
+            'statistics': stats
         }
-        print(f"  ✅ Metadata collected")
-        print(f"     - Process Groups: {metadata['statistics']['process_groups']}")
-        print(f"     - Processors: {metadata['statistics']['processors']}")
-        print(f"     - Connections: {metadata['statistics']['connections']}")
         
-        # Step 5: Commit to GitHub
-        print("Step 5: Committing to GitHub...")
-        g = Github(GITHUB_TOKEN)
+        print(f"  📅 Backup Date: {backup_date}")
+        print(f"  🕐 Backup Time: {backup_time}")
+        print("")
+        
+        # Step 6: Connect to GitHub
+        print("Step 6: Connecting to GitHub...")
+        auth = Auth.Token(GITHUB_TOKEN)
+        g = Github(auth=auth)
         repo = g.get_repo(GITHUB_REPO)
+        print("  ✅ Connected successfully")
+        print("")
         
-        commit_msg = f"NiFi backup: {date_folder} {time_folder}"
+        # Step 7: Upload to GitHub
+        print("Step 7: Uploading backup to GitHub...")
+        backup_path = f"{BACKUP_FOLDER}/{backup_date}/{backup_time}"
         
-        # Commit flow file
-        commit_file_to_github(
-            g, repo,
-            f"{backup_path}/flow.json.gz",
-            flow_content,
-            commit_msg
-        )
+        # Upload flow.json.gz
+        flow_file_path = f"{backup_path}/flow.json.gz"
+        flow_compressed = gzip.compress(flow_data)
         
-        # Commit metadata
-        commit_file_to_github(
-            g, repo,
-            f"{backup_path}/metadata.json",
-            json.dumps(metadata, indent=2),
-            commit_msg
-        )
+        try:
+            repo.create_file(
+                flow_file_path,
+                f"Backup NiFi flow - {backup_date} {backup_time}",
+                flow_compressed,
+                branch=BACKUP_BRANCH
+            )
+            print(f"  ✅ Uploaded: {flow_file_path}")
+        except Exception as e:
+            print(f"  ⚠️  File may already exist, trying update...")
+            contents = repo.get_contents(flow_file_path, ref=BACKUP_BRANCH)
+            repo.update_file(
+                flow_file_path,
+                f"Update NiFi flow backup - {backup_date} {backup_time}",
+                flow_compressed,
+                contents.sha,
+                branch=BACKUP_BRANCH
+            )
+            print(f"  ✅ Updated: {flow_file_path}")
+        
+        # Upload metadata.json
+        metadata_file_path = f"{backup_path}/metadata.json"
+        metadata_json = json.dumps(metadata, indent=2).encode('utf-8')
+        
+        try:
+            repo.create_file(
+                metadata_file_path,
+                f"Backup metadata - {backup_date} {backup_time}",
+                metadata_json,
+                branch=BACKUP_BRANCH
+            )
+            print(f"  ✅ Uploaded: {metadata_file_path}")
+        except Exception as e:
+            print(f"  ⚠️  File may already exist, trying update...")
+            contents = repo.get_contents(metadata_file_path, ref=BACKUP_BRANCH)
+            repo.update_file(
+                metadata_file_path,
+                f"Update metadata - {backup_date} {backup_time}",
+                metadata_json,
+                contents.sha,
+                branch=BACKUP_BRANCH
+            )
+            print(f"  ✅ Updated: {metadata_file_path}")
         
         print("")
         print("=" * 60)
         print("✅ BACKUP COMPLETED SUCCESSFULLY")
-        print(f"   📁 Location: {backup_path}/")
-        print(f"   📄 Files: flow.json.gz, metadata.json")
+        print("=" * 60)
+        print("")
+        print(f"Backup location: {backup_path}")
+        print(f"Total components: {sum(stats.values())}")
+        print("")
         print("=" * 60)
         
-    except requests.exceptions.ConnectionError as e:
-        print(f"❌ Connection Error: Cannot connect to NiFi at {NIFI_HOST}")
-        print(f"   Details: {e}")
-        sys.exit(1)
-    except requests.exceptions.HTTPError as e:
-        print(f"❌ HTTP Error: {e}")
-        sys.exit(1)
+        g.close()
+        
     except Exception as e:
         print(f"❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
 
 
