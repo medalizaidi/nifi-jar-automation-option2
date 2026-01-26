@@ -1,0 +1,114 @@
+version: 2.1
+# ===========================================
+# EXECUTORS
+# ===========================================
+executors:
+  python-executor:
+    docker:
+      - image: cimg/python:3.11
+    resource_class: small
+
+# ===========================================
+# JOBS
+# ===========================================
+jobs:
+  nifi-backup:
+    executor: python-executor
+    steps:
+      - checkout
+      - run:
+          name: Debug GitHub variables
+          command: |
+            echo "========================================"
+            echo "         DEBUG VARIABLES"
+            echo "========================================"
+            echo ""
+            echo "GITHUB_REPO: ${GITHUB_REPO:-❌ NOT SET}"
+            echo ""
+            if [ -n "${GITHUB_TOKEN}" ]; then
+              echo "✅ GITHUB_TOKEN is set (length: ${#GITHUB_TOKEN})"
+            else
+              echo "❌ GITHUB_TOKEN is NOT set"
+            fi
+            echo ""
+            echo "NIFI_HOST: ${NIFI_HOST:-❌ NOT SET}"
+            echo "NIFI_USERNAME: ${NIFI_USERNAME:-❌ NOT SET}"
+            if [ -n "${NIFI_PASSWORD}" ]; then
+              echo "✅ NIFI_PASSWORD is set"
+            else
+              echo "❌ NIFI_PASSWORD is NOT set"
+            fi
+            echo ""
+            echo "========================================"
+      - run:
+          name: Install dependencies
+          command: pip install PyGithub requests
+      - run:
+          name: Backup NiFi Processes to GitHub
+          command: python scripts/backup_nifi.py
+
+  cleanup-old-backups:
+    executor: python-executor
+    steps:
+      - checkout
+      - run:
+          name: Install dependencies
+          command: pip install PyGithub
+      - run:
+          name: Cleanup backups older than 15 days
+          command: python scripts/cleanup_old_backups.py
+
+# ===========================================
+# WORKFLOWS
+# ===========================================
+workflows:
+  version: 2
+
+  # ===========================================
+  # NiFi Backup - Runs on every push
+  # ===========================================
+  nifi-backup-on-push:
+    jobs:
+      - nifi-backup:
+          context:
+            - nifi-context
+            - github-context
+
+  # ===========================================
+  # NiFi Backup - Scheduled twice daily
+  # ===========================================
+  nifi-backup-scheduled:
+    triggers:
+      - schedule:
+          cron: "0 0 * * *"  # Midnight UTC
+          filters:
+            branches:
+              only:
+                - main
+      - schedule:
+          cron: "0 12 * * *"  # Noon UTC
+          filters:
+            branches:
+              only:
+                - main
+    jobs:
+      - nifi-backup:
+          context:
+            - nifi-context
+            - github-context
+
+  # ===========================================
+  # Cleanup Old Backups - Runs daily at 2 AM UTC
+  # ===========================================
+  cleanup-old-backups-scheduled:
+    triggers:
+      - schedule:
+          cron: "0 2 * * *"  # 2 AM UTC daily
+          filters:
+            branches:
+              only:
+                - main
+    jobs:
+      - cleanup-old-backups:
+          context:
+            - github-context

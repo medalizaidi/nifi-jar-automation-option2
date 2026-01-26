@@ -72,9 +72,9 @@ jobs:
           name: Build and Push to ECR
           command: |
             # Login to ECR
-            # aws ecr get-login-password --region ${AWS_REGION} | \
-              # docker login --username AWS --password-stdin \
-              # ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+            aws ecr get-login-password --region ${AWS_REGION} | \
+              docker login --username AWS --password-stdin \
+              ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
             
             # Build image
             cd workload/mfx-aggre-data-platform/custom_nifi
@@ -82,15 +82,15 @@ jobs:
             ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/apache-nifi-with-custom-jars-repo"
             
             echo "Building Docker image with dynamically added JARs..."
-            docker build -t${IMAGE_TAG} .
-            docker tag ${IMAGE_TAG} ${IMAGE_TAG}:latest
+            docker build -t ${ECR_REPO}:${IMAGE_TAG} .
+            docker tag ${ECR_REPO}:${IMAGE_TAG} ${ECR_REPO}:latest
             
             # Push to ECR
-            # docker push ${ECR_REPO}:${IMAGE_TAG}
-            # docker push ${ECR_REPO}:latest
+            docker push ${ECR_REPO}:${IMAGE_TAG}
+            docker push ${ECR_REPO}:latest
             
             # Save tag for next job
-            # echo "${IMAGE_TAG}" > /tmp/image-tag.txt
+            echo "${IMAGE_TAG}" > /tmp/image-tag.txt
             
             echo "✅ Docker image built and pushed with custom JARs"
       
