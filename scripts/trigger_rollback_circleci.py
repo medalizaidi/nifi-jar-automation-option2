@@ -2,7 +2,7 @@
 """
 CircleCI Rollback Trigger Script
 Triggers the rollback pipeline via CircleCI API with date/time parameters
-Usage: python trigger_rollback_circleci.py [--list] [--date YYYY-MM-DD] [--time HH-MM-UTC]
+Usage: python trigger_rollback_circleci.py [--list] [--date YYYY-MM-DD] [--time HH-MM-JST or HH-MM-UTC]
 """
 
 import os
@@ -83,11 +83,11 @@ def validate_date_format(date_str):
 
 
 def validate_time_format(time_str):
-    """Validate time is in HH-MM-UTC format"""
-    if not time_str.endswith('-UTC'):
+    """Validate time is in HH-MM-JST or HH-MM-JST or HH-MM-UTC format"""
+    if not (time_str.endswith('-JST') or time_str.endswith('-UTC')):
         return False
     try:
-        time_part = time_str.replace('-UTC', '')
+        time_part = time_str.replace('-JST', '').replace('-UTC', '')
         datetime.strptime(time_part, '%H-%M')
         return True
     except ValueError:
@@ -196,7 +196,7 @@ def list_backups():
         print("4. Note the backup date and time you want to restore")
         print()
         print("Then run:")
-        print(f"  {Colors.YELLOW}python {sys.argv[0]} --date YYYY-MM-DD --time HH-MM-UTC{Colors.NC}")
+        print(f"  {Colors.YELLOW}python {sys.argv[0]} --date YYYY-MM-DD --time HH-MM-JST or HH-MM-UTC{Colors.NC}")
         print(f"{Colors.CYAN}{'─' * 70}{Colors.NC}")
         print()
         
@@ -211,7 +211,7 @@ def rollback_to_backup(backup_date, backup_time, automated=False):
     
     Args:
         backup_date (str): Backup date in YYYY-MM-DD format
-        backup_time (str): Backup time in HH-MM-UTC format
+        backup_time (str): Backup time in HH-MM-JST or HH-MM-UTC format
         automated (bool): If True, uploads directly to NiFi
     """
     print_header("NiFi Rollback Execution")
@@ -232,9 +232,9 @@ def rollback_to_backup(backup_date, backup_time, automated=False):
     if not validate_time_format(backup_time):
         print_error(f"Invalid time format: {backup_time}")
         print()
-        print("Expected format: HH-MM-UTC")
+        print("Expected format: HH-MM-JST or HH-MM-UTC")
         print("Examples:")
-        print("  ✅ 12-00-UTC")
+        print("  ✅ 12-00-JST")
         print("  ✅ 00-00-UTC")
         print("  ✅ 23-59-UTC")
         print("  ❌ 12-00 (missing -UTC)")
@@ -390,7 +390,7 @@ def rollback_to_backup(backup_date, backup_time, automated=False):
     
     Args:
         backup_date (str): Backup date in YYYY-MM-DD format
-        backup_time (str): Backup time in HH-MM-UTC format
+        backup_time (str): Backup time in HH-MM-JST or HH-MM-UTC format
     """
     print_header("NiFi Rollback Execution")
     
@@ -410,9 +410,9 @@ def rollback_to_backup(backup_date, backup_time, automated=False):
     if not validate_time_format(backup_time):
         print_error(f"Invalid time format: {backup_time}")
         print()
-        print("Expected format: HH-MM-UTC")
+        print("Expected format: HH-MM-JST or HH-MM-UTC")
         print("Examples:")
-        print("  ✅ 12-00-UTC")
+        print("  ✅ 12-00-JST")
         print("  ✅ 00-00-UTC")
         print("  ✅ 23-59-UTC")
         print("  ❌ 12-00 (missing -UTC)")
@@ -554,12 +554,12 @@ Examples:
   python trigger_rollback_circleci.py --list
   
   # Rollback to specific backup
-  python trigger_rollback_circleci.py --date 2026-01-26 --time 12-00-UTC
+  python trigger_rollback_circleci.py --date 2026-01-26 --time 12-00-JST
   
   # Using custom repository
   export REPO_OWNER="myorg"
   export REPO_NAME="my-nifi-repo"
-  python trigger_rollback_circleci.py --date 2026-01-26 --time 12-00-UTC
+  python trigger_rollback_circleci.py --date 2026-01-26 --time 12-00-JST
 
 Environment Variables:
   CIRCLECI_TOKEN  Your CircleCI personal API token (required)
@@ -585,8 +585,8 @@ Environment Variables:
     parser.add_argument(
         '--time',
         type=str,
-        metavar='HH-MM-UTC',
-        help='Backup time to restore (format: HH-MM-UTC)'
+        metavar='HH-MM-JST or HH-MM-UTC',
+        help='Backup time to restore (format: HH-MM-JST or HH-MM-UTC)'
     )
     
     parser.add_argument(
@@ -639,8 +639,8 @@ Environment Variables:
         print_error("Both --date and --time are required for rollback")
         print()
         print("Usage:")
-        print("  python trigger_rollback_circleci.py --date YYYY-MM-DD --time HH-MM-UTC")
-        print("  python trigger_rollback_circleci.py --date YYYY-MM-DD --time HH-MM-UTC --automated")
+        print("  python trigger_rollback_circleci.py --date YYYY-MM-DD --time HH-MM-JST or HH-MM-UTC")
+        print("  python trigger_rollback_circleci.py --date YYYY-MM-DD --time HH-MM-JST or HH-MM-UTC --automated")
         print()
         print("Or to list available backups:")
         print("  python trigger_rollback_circleci.py --list")

@@ -33,7 +33,7 @@ BACKUP_FOLDER = os.environ.get('BACKUP_FOLDER', 'nifi-backups')
 
 # Pipeline parameters (from CircleCI)
 BACKUP_DATE = os.environ.get('BACKUP_DATE', '')  # Format: YYYY-MM-DD
-BACKUP_TIME = os.environ.get('BACKUP_TIME', '')  # Format: HH-MM-UTC
+BACKUP_TIME = os.environ.get('BACKUP_TIME', '')  # Format: HH-MM-JST or HH-MM-UTC
 
 # Rollback settings
 AUTO_CONFIRM = os.environ.get('AUTO_CONFIRM', 'false').lower() == 'true'

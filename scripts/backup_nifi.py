@@ -161,15 +161,23 @@ def main():
         
         # Step 5: Prepare backup
         print("Step 5: Preparing backup files...")
-        timestamp = datetime.utcnow()
-        backup_date = timestamp.strftime('%Y-%m-%d')
-        backup_time = timestamp.strftime('%H-%M') + '-UTC'
+        
+        # Use Japan timezone (JST = UTC+9)
+        from datetime import timedelta, timezone
+        jst = timezone(timedelta(hours=9))
+        timestamp_utc = datetime.utcnow().replace(tzinfo=timezone.utc)
+        timestamp_jst = timestamp_utc.astimezone(jst)
+        
+        backup_date = timestamp_jst.strftime('%Y-%m-%d')
+        backup_time = timestamp_jst.strftime('%H-%M') + '-JST'
         
         # Create metadata
         metadata = {
-            'backup_timestamp': timestamp.isoformat() + 'Z',
+            'backup_timestamp_utc': timestamp_utc.isoformat(),
+            'backup_timestamp_jst': timestamp_jst.isoformat(),
             'backup_date': backup_date,
             'backup_time': backup_time,
+            'timezone': 'Asia/Tokyo (JST, UTC+9)',
             'nifi_host': NIFI_HOST,
             'root_process_group_id': root_pg_id,
             'statistics': stats

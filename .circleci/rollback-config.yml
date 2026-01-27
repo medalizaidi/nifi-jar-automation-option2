@@ -1,6 +1,6 @@
 version: 2.1
 # ===========================================
-# NiFi Rollback Pipeline
+# NiFi Rollback Pipeline with Backup Selection
 # ===========================================
 
 # ===========================================
@@ -15,7 +15,7 @@ parameters:
   backup-time:
     type: string
     default: ""
-    description: "Backup time (HH-MM-UTC)"
+    description: "Backup time (HH-MM-JST or HH-MM-UTC)"
   
   automated:
     type: boolean
@@ -43,8 +43,40 @@ jobs:
           name: Install dependencies
           command: pip install PyGithub
       - run:
-          name: List all backups
-          command: python scripts/rollback_nifi_automated.py --list-only
+          name: List all backups with selection instructions
+          command: |
+            python scripts/rollback_nifi_automated.py --list-only
+            echo ""
+            echo "============================================================"
+            echo "   TO ROLLBACK TO A SPECIFIC BACKUP:"
+            echo "============================================================"
+            echo ""
+            echo "1. Go to CircleCI → Projects → Your Project"
+            echo "2. Click 'Trigger Pipeline' (blue button top-right)"
+            echo "3. Branch: main"
+            echo "4. Add Parameters:"
+            echo "   - Name: backup-date"
+            echo "     Type: string"
+            echo "     Value: YYYY-MM-DD (from list above)"
+            echo ""
+            echo "   - Name: backup-time"
+            echo "     Type: string"
+            echo "     Value: HH-MM-JST (from list above)"
+            echo ""
+            echo "   - Name: automated (optional)"
+            echo "     Type: boolean"
+            echo "     Value: true (for automatic upload to NiFi)"
+            echo "            false (for manual completion - SAFER)"
+            echo ""
+            echo "5. Click 'Trigger Pipeline'"
+            echo "6. Approve when prompted"
+            echo ""
+            echo "Example:"
+            echo "  backup-date: 2026-01-27"
+            echo "  backup-time: 12-00-JST"
+            echo "  automated: false"
+            echo ""
+            echo "============================================================"
 
   validate-parameters:
     executor: python-executor
@@ -74,12 +106,64 @@ jobs:
               exit 1
             fi
             
-            if ! echo "$BACKUP_TIME" | grep -qE '^[0-9]{2}-[0-9]{2}-UTC$'; then
+            if ! echo "$BACKUP_TIME" | grep -qE '^[0-9]{2}-[0-9]{2}-(UTC|JST)$'; then
               echo "❌ Invalid time format: $BACKUP_TIME"
+              echo "   Expected: HH-MM-JST or HH-MM-UTC (e.g., 12-00-JST)"
               exit 1
             fi
             
             echo "✅ Parameters are valid"
+
+  display-rollback-info:
+    executor: python-executor
+    parameters:
+      backup-date:
+        type: string
+      backup-time:
+        type: string
+      automated:
+        type: boolean
+    steps:
+      - run:
+          name: Display rollback information for approval
+          command: |
+            echo "========================================"
+            echo "   ROLLBACK APPROVAL REQUIRED"
+            echo "========================================"
+            echo ""
+            echo "You are about to rollback NiFi to:"
+            echo ""
+            echo "  📅 Date: << parameters.backup-date >>"
+            echo "  🕐 Time: << parameters.backup-time >>"
+            echo "  🤖 Mode: << parameters.automated >>"
+            echo ""
+            if [ "<< parameters.automated >>" = "true" ]; then
+              echo "⚠️  AUTOMATED MODE - DESTRUCTIVE!"
+              echo ""
+              echo "This will:"
+              echo "  1. Stop all processors"
+              echo "  2. DELETE all existing components"
+              echo "  3. Upload the backup automatically"
+              echo "  4. Leave processors stopped"
+              echo ""
+              echo "🔴 THIS CANNOT BE UNDONE!"
+            else
+              echo "✅ MANUAL MODE - SAFER"
+              echo ""
+              echo "This will:"
+              echo "  1. Download the backup from GitHub"
+              echo "  2. Save to CircleCI artifacts"
+              echo "  3. You complete the rollback in NiFi UI"
+              echo ""
+              echo "🟢 You have full control"
+            fi
+            echo ""
+            echo "========================================"
+            echo ""
+            echo "Review the information above carefully."
+            echo "Click 'Approve' to proceed."
+            echo ""
+            echo "========================================"
 
   nifi-rollback-manual:
     executor: python-executor
@@ -220,10 +304,17 @@ workflows:
           backup-date: << pipeline.parameters.backup-date >>
           backup-time: << pipeline.parameters.backup-time >>
       
+      - display-rollback-info:
+          requires:
+            - validate-parameters
+          backup-date: << pipeline.parameters.backup-date >>
+          backup-time: << pipeline.parameters.backup-time >>
+          automated: false
+      
       - hold-for-rollback-approval:
           type: approval
           requires:
-            - validate-parameters
+            - display-rollback-info
           filters:
             branches:
               only:
@@ -239,6 +330,7 @@ workflows:
             - github-context
 
   # Automated rollback (uploads directly to NiFi)
+workflows:
   automated-rollback:
     when:
       and:
@@ -253,10 +345,9 @@ workflows:
           type: approval
           requires:
             - validate-parameters
-          filters:
-            branches:
-              only:
-                - main
+          # This approval job will only show approve button to:
+          # - Members of nifi-rollback-approvers security group
+          # - Organization admins
       
       - nifi-rollback-automated:
           requires:
@@ -264,5 +355,4 @@ workflows:
           backup-date: << pipeline.parameters.backup-date >>
           backup-time: << pipeline.parameters.backup-time >>
           context:
-            - nifi-context
-            - github-context
+            - nifi-rollback-restricted  # ← Restricted context
