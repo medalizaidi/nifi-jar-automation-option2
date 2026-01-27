@@ -204,6 +204,192 @@ def delete_all_components(token, process_group_id):
 
 
 def import_process_group_recursively(token, parent_pg_id, pg_data):
+    """Recursively import a process group and all its contents
+    
+    NOTE: NiFi backup format has components DIRECTLY in the processGroup object,
+    NOT in a nested 'contents' or 'component.contents' structure
+    """
+    
+    # Create the process group
+    import_url = f"{NIFI_HOST}/nifi-api/process-groups/{parent_pg_id}/process-groups"
+    headers = {
+        'Authorization': f'Bearer {token}',
+        'Content-Type': 'application/json'
+    }
+    
+    payload = {
+        'revision': {'version': 0},
+        'component': {
+            'name': pg_data.get('name', 'Imported Process Group'),
+            'position': pg_data.get('position', {'x': 0, 'y': 0})
+        }
+    }
+    
+    response = requests.post(import_url, headers=headers, json=payload, verify=False, timeout=60)
+    
+    if response.status_code not in [200, 201]:
+        print(f"     ⚠️  Warning: Could not create process group '{pg_data.get('name')}': {response.status_code}")
+        print(f"        Response: {response.text[:200]}")
+        return 0
+    
+    result = response.json()
+    new_pg_id = result['id']
+    print(f"     ✅ Created process group: {pg_data.get('name')} (ID: {new_pg_id[:8]}...)")
+    
+    imported = 1
+    
+    # Import processors (directly in pg_data, not in a 'contents' object)
+    processors = pg_data.get('processors', [])
+    if processors:
+        print(f"        📥 Importing {len(processors)} processor(s)...")
+    
+    for processor in processors:
+        try:
+            proc_url = f"{NIFI_HOST}/nifi-api/process-groups/{new_pg_id}/processors"
+            
+            # Build processor payload - need to extract just the necessary fields
+            proc_component = {
+                'name': processor.get('name'),
+                'type': processor.get('type'),
+                'bundle': processor.get('bundle'),
+                'position': processor.get('position', {'x': 0, 'y': 0}),
+                'style': processor.get('style', {}),
+                'config': {
+                    'properties': processor.get('properties', {}),
+                    'schedulingPeriod': processor.get('schedulingPeriod', '0 sec'),
+                    'schedulingStrategy': processor.get('schedulingStrategy', 'TIMER_DRIVEN'),
+                    'executionNode': processor.get('executionNode', 'ALL'),
+                    'penaltyDuration': processor.get('penaltyDuration', '30 sec'),
+                    'yieldDuration': processor.get('yieldDuration', '1 sec'),
+                    'bulletinLevel': processor.get('bulletinLevel', 'WARN'),
+                    'runDurationMillis': processor.get('runDurationMillis', 0),
+                    'concurrentlySchedulableTaskCount': processor.get('concurrentlySchedulableTaskCount', 1),
+                    'autoTerminatedRelationships': processor.get('autoTerminatedRelationships', [])
+                }
+            }
+            
+            proc_payload = {
+                'revision': {'version': 0},
+                'component': proc_component
+            }
+            
+            proc_response = requests.post(proc_url, headers=headers, json=proc_payload, verify=False, timeout=60)
+            if proc_response.status_code in [200, 201]:
+                imported += 1
+                print(f"        ✅ Imported processor: {processor.get('name', 'Unknown')}")
+            else:
+                print(f"        ⚠️  Warning: Could not import processor '{processor.get('name')}': {proc_response.status_code}")
+                print(f"           Response: {proc_response.text[:300]}")
+        except Exception as e:
+            print(f"        ⚠️  Error importing processor: {e}")
+    
+    # Import connections (directly in pg_data)
+    connections = pg_data.get('connections', [])
+    if connections:
+        print(f"        📥 Importing {len(connections)} connection(s)...")
+    
+    for connection in connections:
+        try:
+            conn_url = f"{NIFI_HOST}/nifi-api/process-groups/{new_pg_id}/connections"
+            
+            conn_component = {
+                'name': connection.get('name', ''),
+                'source': connection.get('source'),
+                'destination': connection.get('destination'),
+                'selectedRelationships': connection.get('selectedRelationships', []),
+                'backPressureDataSizeThreshold': connection.get('backPressureDataSizeThreshold', '1 GB'),
+                'backPressureObjectThreshold': connection.get('backPressureObjectThreshold', 10000),
+                'flowFileExpiration': connection.get('flowFileExpiration', '0 sec'),
+                'prioritizers': connection.get('prioritizers', []),
+                'bends': connection.get('bends', [])
+            }
+            
+            conn_payload = {
+                'revision': {'version': 0},
+                'component': conn_component
+            }
+            
+            conn_response = requests.post(conn_url, headers=headers, json=conn_payload, verify=False, timeout=60)
+            if conn_response.status_code in [200, 201]:
+                imported += 1
+                print(f"        ✅ Imported connection")
+            else:
+                print(f"        ⚠️  Warning: Could not import connection: {conn_response.status_code}")
+                print(f"           Response: {conn_response.text[:200]}")
+        except Exception as e:
+            print(f"        ⚠️  Error importing connection: {e}")
+    
+    # Import input ports (directly in pg_data)
+    for port in pg_data.get('inputPorts', []):
+        try:
+            port_url = f"{NIFI_HOST}/nifi-api/process-groups/{new_pg_id}/input-ports"
+            port_payload = {
+                'revision': {'version': 0},
+                'component': {
+                    'name': port.get('name'),
+                    'position': port.get('position', {'x': 0, 'y': 0})
+                }
+            }
+            
+            port_response = requests.post(port_url, headers=headers, json=port_payload, verify=False, timeout=60)
+            if port_response.status_code in [200, 201]:
+                imported += 1
+                print(f"        ✅ Imported input port: {port.get('name', 'Unknown')}")
+            else:
+                print(f"        ⚠️  Warning: Could not import input port: {port_response.status_code}")
+        except Exception as e:
+            print(f"        ⚠️  Error importing input port: {e}")
+    
+    # Import output ports (directly in pg_data)
+    for port in pg_data.get('outputPorts', []):
+        try:
+            port_url = f"{NIFI_HOST}/nifi-api/process-groups/{new_pg_id}/output-ports"
+            port_payload = {
+                'revision': {'version': 0},
+                'component': {
+                    'name': port.get('name'),
+                    'position': port.get('position', {'x': 0, 'y': 0})
+                }
+            }
+            
+            port_response = requests.post(port_url, headers=headers, json=port_payload, verify=False, timeout=60)
+            if port_response.status_code in [200, 201]:
+                imported += 1
+                print(f"        ✅ Imported output port: {port.get('name', 'Unknown')}")
+            else:
+                print(f"        ⚠️  Warning: Could not import output port: {port_response.status_code}")
+        except Exception as e:
+            print(f"        ⚠️  Error importing output port: {e}")
+    
+    # Import funnels (directly in pg_data)
+    for funnel in pg_data.get('funnels', []):
+        try:
+            funnel_url = f"{NIFI_HOST}/nifi-api/process-groups/{new_pg_id}/funnels"
+            funnel_payload = {
+                'revision': {'version': 0},
+                'component': {
+                    'position': funnel.get('position', {'x': 0, 'y': 0})
+                }
+            }
+            
+            funnel_response = requests.post(funnel_url, headers=headers, json=funnel_payload, verify=False, timeout=60)
+            if funnel_response.status_code in [200, 201]:
+                imported += 1
+                print(f"        ✅ Imported funnel")
+            else:
+                print(f"        ⚠️  Warning: Could not import funnel: {funnel_response.status_code}")
+        except Exception as e:
+            print(f"        ⚠️  Error importing funnel: {e}")
+    
+    # Recursively import child process groups (directly in pg_data)
+    for child_pg in pg_data.get('processGroups', []):
+        try:
+            child_imported = import_process_group_recursively(token, new_pg_id, child_pg)
+            imported += child_imported
+        except Exception as e:
+            print(f"        ⚠️  Error importing child process group: {e}")
+    
+    return imported
     """Recursively import a process group and all its contents"""
     
     # Create the process group

@@ -78,24 +78,22 @@ def count_components_recursive(flow_contents):
     stats['labels'] += len(flow_contents.get('labels', []))
     
     # Recursively count in child process groups
+    # NOTE: NiFi backup format has processors DIRECTLY in processGroups array
+    # NOT in processGroups[].contents or processGroups[].component.contents
     for pg in flow_contents.get('processGroups', []):
         stats['process_groups'] += 1
         
-        # Get contents of child process group
-        pg_contents = pg.get('contents', pg.get('component', {}).get('contents', {}))
+        # Processors are directly in the pg object
+        child_stats = count_components_recursive(pg)
         
-        if pg_contents:
-            # Recursively count components in child
-            child_stats = count_components_recursive(pg_contents)
-            
-            # Add child stats to total (except process_groups, we already counted that)
-            stats['processors'] += child_stats['processors']
-            stats['connections'] += child_stats['connections']
-            stats['input_ports'] += child_stats['input_ports']
-            stats['output_ports'] += child_stats['output_ports']
-            stats['funnels'] += child_stats['funnels']
-            stats['labels'] += child_stats['labels']
-            stats['process_groups'] += child_stats['process_groups']
+        # Add child stats to total (except process_groups, we already counted that)
+        stats['processors'] += child_stats['processors']
+        stats['connections'] += child_stats['connections']
+        stats['input_ports'] += child_stats['input_ports']
+        stats['output_ports'] += child_stats['output_ports']
+        stats['funnels'] += child_stats['funnels']
+        stats['labels'] += child_stats['labels']
+        stats['process_groups'] += child_stats['process_groups']
     
     return stats
 
