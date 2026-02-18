@@ -1,5 +1,16 @@
 version: 2.1
 # ===========================================
+# PARAMETERS (for UI scheduled triggers)
+# ===========================================
+parameters:
+  run-scheduled-backup:
+    type: boolean
+    default: false
+  run-scheduled-cleanup:
+    type: boolean
+    default: false
+
+# ===========================================
 # EXECUTORS
 # ===========================================
 executors:
@@ -62,20 +73,28 @@ jobs:
 # WORKFLOWS
 # ===========================================
 workflows:
-  version: 2
-
   # ===========================================
   # NiFi Backup - Runs on every push
   # ===========================================
   nifi-backup-on-push:
+    when:
+      and:
+        - not: << pipeline.parameters.run-scheduled-backup >>
+        - not: << pipeline.parameters.run-scheduled-cleanup >>
     jobs:
       - nifi-backup:
           context:
             - nifi-context
             - github-context
 
-
+  # ===========================================
+  # Manual Cleanup with Approval Gate
+  # ===========================================
   manual-test-cleanup:
+    when:
+      and:
+        - not: << pipeline.parameters.run-scheduled-backup >>
+        - not: << pipeline.parameters.run-scheduled-cleanup >>
     jobs:
       - hold-for-cleanup-approval:
           type: approval
@@ -86,22 +105,15 @@ workflows:
             - github-context
 
   # ===========================================
-  # NiFi Backup - Scheduled twice daily
+  # NiFi Backup - UI Scheduled Trigger
+  # Create trigger in CircleCI UI:
+  #   Name: backup-schedule
+  #   Cron: 0 0 * * *  (Midnight UTC)
+  #   Cron: 0 12 * * * (Noon UTC) → second trigger
+  #   Parameter: run-scheduled-backup = true
   # ===========================================
   nifi-backup-scheduled:
-    triggers:
-      - schedule:
-          cron: "0 0 * * *"  # Midnight UTC
-          filters:
-            branches:
-              only:
-                - main
-      - schedule:
-          cron: "0 12 * * *"  # Noon UTC
-          filters:
-            branches:
-              only:
-                - main
+    when: << pipeline.parameters.run-scheduled-backup >>
     jobs:
       - nifi-backup:
           context:
@@ -109,16 +121,14 @@ workflows:
             - github-context
 
   # ===========================================
-  # Cleanup Old Backups - Runs daily at 2 AM UTC
+  # Cleanup Old Backups - UI Scheduled Trigger
+  # Create trigger in CircleCI UI:
+  #   Name: cleanup-schedule
+  #   Cron: 0 2 * * * (2 AM UTC daily)
+  #   Parameter: run-scheduled-cleanup = true
   # ===========================================
   cleanup-old-backups-scheduled:
-    triggers:
-      - schedule:
-          cron: "0 2 * * *"  # 2 AM UTC daily
-          filters:
-            branches:
-              only:
-                - main
+    when: << pipeline.parameters.run-scheduled-cleanup >>
     jobs:
       - cleanup-old-backups:
           context:
