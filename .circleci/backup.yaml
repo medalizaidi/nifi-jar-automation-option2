@@ -97,7 +97,7 @@ workflows:
               only:
                 - main
       - schedule:
-          cron: "0 12 * * *"  # Noon UTC
+          cron: "0 10 50 * *"  # Noon UTC
           filters:
             branches:
               only:
