@@ -76,6 +76,12 @@ RUN curl -L "https://repo1.maven.org/maven2/org/elasticsearch/client/elasticsear
         -o /opt/nifi/nifi-current/lib/elasticsearch-rest-client-8.11.3.jar && \
         chown 1000:1000 /opt/nifi/nifi-current/lib/elasticsearch-rest-client-8.11.3.jar
 
+
+# Download Apache Kafka Client Library
+RUN curl -L "https://repo1.maven.org/maven2/org/apache/kafka/kafka-clients/3.6.1/kafka-clients-3.6.1.jar" \
+        -o /opt/nifi/nifi-current/lib/kafka-clients-3.6.1.jar && \
+        chown 1000:1000 /opt/nifi/nifi-current/lib/kafka-clients-3.6.1.jar
+
 # ============================================================
 # NEW JARS WILL BE ADDED AUTOMATICALLY ABOVE THIS LINE
 # DO NOT REMOVE THIS COMMENT - IT'S USED BY THE CI PIPELINE
