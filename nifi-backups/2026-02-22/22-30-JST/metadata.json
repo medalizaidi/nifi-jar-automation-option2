@@ -1,0 +1,18 @@
+{
+  "backup_timestamp_utc": "2026-02-22T13:30:17.663449+00:00",
+  "backup_timestamp_jst": "2026-02-22T22:30:17.663449+09:00",
+  "backup_date": "2026-02-22",
+  "backup_time": "22-30-JST",
+  "timezone": "Asia/Tokyo (JST, UTC+9)",
+  "nifi_host": "https://nifi-new.avaxiagroup.org",
+  "root_process_group_id": "e062db1b-019b-1000-33f7-a0beed604b55",
+  "statistics": {
+    "process_groups": 1,
+    "processors": 1,
+    "connections": 0,
+    "input_ports": 0,
+    "output_ports": 0,
+    "funnels": 0,
+    "labels": 0
+  }
+}
